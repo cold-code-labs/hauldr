@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { createProject, listProjects, destroyProject } from "./provision";
+import { listProjects, destroyProject } from "./provision";
+import { startProvision, getProjectDetail } from "./lifecycle";
 import { provisionRest, destroyRest } from "./postgrest";
 import { ensureMaster } from "./zero";
 import { config } from "./config";
@@ -85,12 +86,23 @@ app.get("/health", (c) => c.json({ ok: true, service: "hauldr-control-plane" }))
 
 app.get("/v1/projects", async (c) => c.json(await listProjects()));
 
+app.get("/v1/projects/:name", async (c) => {
+  const detail = await getProjectDetail(c.req.param("name"));
+  if (!detail) return c.json({ error: "not found" }, 404);
+  return c.json(detail);
+});
+
+// Provisioning is async: register the project, kick off the database + sidecars
+// in the background, and return immediately so the caller can poll status. The
+// optional `rest` flag also brings up the PostgREST sidecar.
 app.post("/v1/projects", async (c) => {
-  const body = await c.req.json().catch(() => ({}) as { name?: string });
+  const body = await c.req
+    .json()
+    .catch(() => ({}) as { name?: string; rest?: boolean });
   if (!body?.name) return c.json({ error: "name required" }, 400);
   try {
-    const res = await createProject(body.name);
-    return c.json(res, 201);
+    const res = await startProvision(body.name, { rest: !!body.rest });
+    return c.json(res, 202);
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }

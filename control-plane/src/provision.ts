@@ -211,7 +211,9 @@ export async function destroyProject(
 
 export async function listProjects() {
   const { rows } = await controlPool.query(
-    "select name, database, role, created_at from projects order by created_at",
+    `select name, database, role, status, status_detail,
+            gotrue_url, postgrest_url, rest_requested, created_at
+       from projects order by created_at`,
   );
   return rows;
 }
