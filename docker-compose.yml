@@ -1,0 +1,67 @@
+# Hauldr — local development stack: the shared core.
+#   Postgres (the heart) + Supavisor (multi-tenant connection pooler).
+#
+# The control plane runs on the host via pnpm. Bring it up between `db` and
+# `pooler`, so the pooler's metadata database (`_supabase`) exists first:
+#
+#   docker compose up -d db
+#   (cd control-plane && pnpm install && pnpm bootstrap)
+#   docker compose up -d pooler
+#   (cd control-plane && pnpm cli create acme)
+#
+# Ports bind to 127.0.0.1 only — this stack is not meant to face the network.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: hauldr-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - hauldr_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Multi-tenant pooler. Each project is a tenant, provisioned through the
+  # pooler's management API by the control plane; clients route to a project's
+  # database by encoding the tenant in the username (`db_user.tenant_id`).
+  pooler:
+    image: supabase/supavisor:2.9.7
+    container_name: hauldr-pooler
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["/bin/sh", "-c", "/app/bin/migrate && /app/bin/server"]
+    environment:
+      PORT: "4000"
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: _supabase
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DATABASE_URL: ecto://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/_supabase
+      SECRET_KEY_BASE: ${SUPAVISOR_SECRET_KEY_BASE}
+      VAULT_ENC_KEY: ${SUPAVISOR_VAULT_ENC_KEY}
+      API_JWT_SECRET: ${SUPAVISOR_API_JWT_SECRET}
+      METRICS_JWT_SECRET: ${SUPAVISOR_API_JWT_SECRET}
+      CLUSTER_POSTGRES: "true"
+      REGION: local
+      ERL_AFLAGS: -proto_dist inet_tcp
+      POOLER_TENANT_ID: hauldr
+      POOLER_DEFAULT_POOL_SIZE: "10"
+      POOLER_MAX_CLIENT_CONN: "100"
+      POOLER_POOL_MODE: transaction
+      DB_POOL_SIZE: "5"
+    ports:
+      - "127.0.0.1:${HAULDR_POOLER_API_PORT:-4000}:4000"
+      - "127.0.0.1:${HAULDR_POOLER_PORT:-6543}:6543"
+      - "127.0.0.1:${HAULDR_POOLER_SESSION_PORT:-5432}:5432"
+    restart: unless-stopped
+
+volumes:
+  hauldr_pgdata:
