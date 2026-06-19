@@ -3,14 +3,18 @@
 # Postgres (the shared core) + the control plane. Per-project GoTrue is NOT in
 # here: the control plane provisions one per project on demand as a separate
 # Coolify app (HAULDR_AUTH_PROVISIONER=coolify). Those apps reach this Postgres
-# on the shared `coolify` network via its `hauldr-db` alias, which is why
-# HAULDR_AUTH_DB_HOST=hauldr-db below.
+# by its service name `hauldr-db` on the shared network — which is why the
+# Postgres service is named `hauldr-db` (a unique, stable alias) and
+# HAULDR_AUTH_DB_HOST=hauldr-db.
+#
+# Networking is left to the orchestrator (no explicit `networks:` block), so the
+# reverse proxy can route the control plane at its domain.
 #
 # Multi-tenant pooling (Supavisor) is added once the basics are green — see
 # docker-compose.yml for the pooler service shape. Until then the control plane
 # uses direct connections (HAULDR_POOLER_API_URL unset).
 services:
-  db:
+  hauldr-db:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
@@ -18,11 +22,6 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - hauldr_pgdata:/var/lib/postgresql/data
-    networks:
-      default: {}
-      coolify:
-        aliases:
-          - hauldr-db
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -34,11 +33,9 @@ services:
       context: .
       dockerfile: control-plane/Dockerfile
     environment:
-      HAULDR_DB_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
+      HAULDR_DB_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@hauldr-db:5432/postgres
       HAULDR_API_PORT: "8787"
       HAULDR_API_KEY: ${HAULDR_API_KEY}
-      # Per-project GoTrue via Coolify; reaches this db at hauldr-db on the
-      # shared network.
       HAULDR_AUTH_PROVISIONER: coolify
       HAULDR_COOLIFY_API_URL: ${HAULDR_COOLIFY_API_URL}
       HAULDR_COOLIFY_TOKEN: ${HAULDR_COOLIFY_TOKEN}
@@ -49,19 +46,11 @@ services:
       HAULDR_AUTH_DB_HOST: hauldr-db
       HAULDR_AUTH_DB_PORT: "5432"
     depends_on:
-      db:
+      hauldr-db:
         condition: service_healthy
     expose:
       - "8787"
-    networks:
-      default: {}
-      coolify: {}
     restart: unless-stopped
-
-networks:
-  default: {}
-  coolify:
-    external: true
 
 volumes:
   hauldr_pgdata:
