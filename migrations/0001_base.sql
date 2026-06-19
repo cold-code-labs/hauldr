@@ -50,6 +50,11 @@ create policy todos_owner_modify on todos
 grant usage on schema public, hauldr to anon, authenticated;
 grant execute on all functions in schema hauldr to anon, authenticated;
 grant select, insert, update, delete on todos to authenticated;
+-- anon gets table-level SELECT too, so an anonymous REST/SDK read reaches the
+-- table and RLS returns an empty set (200), rather than a table-level 401. The
+-- `alter default privileges` below only covers tables created AFTER it, so the
+-- pre-existing `todos` must be granted explicitly to match that intent.
+grant select on todos to anon;
 
 alter default privileges in schema public
   grant select, insert, update, delete on tables to authenticated;
