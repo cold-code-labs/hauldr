@@ -2,13 +2,11 @@
 #
 # Postgres (the shared core) + the control plane. Per-project GoTrue is NOT in
 # here: the control plane provisions one per project on demand as a separate
-# Coolify app (HAULDR_AUTH_PROVISIONER=coolify). Those apps reach this Postgres
-# by its service name `hauldr-db` on the shared network — which is why the
-# Postgres service is named `hauldr-db` (a unique, stable alias) and
-# HAULDR_AUTH_DB_HOST=hauldr-db.
+# Coolify app (HAULDR_AUTH_PROVISIONER=coolify). Those apps live on the shared
+# `coolify` network, so Postgres joins it too with a stable `hauldr-db` alias —
+# which is what HAULDR_AUTH_DB_HOST points at.
 #
-# Networking is left to the orchestrator (no explicit `networks:` block), so the
-# reverse proxy can route the control plane at its domain.
+# The control plane is routed at its domain via Coolify's docker_compose_domains.
 #
 # Multi-tenant pooling (Supavisor) is added once the basics are green — see
 # docker-compose.yml for the pooler service shape. Until then the control plane
@@ -22,6 +20,11 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - hauldr_pgdata:/var/lib/postgresql/data
+    networks:
+      default: {}
+      coolify:
+        aliases:
+          - hauldr-db
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -50,7 +53,15 @@ services:
         condition: service_healthy
     expose:
       - "8787"
+    networks:
+      default: {}
+      coolify: {}
     restart: unless-stopped
+
+networks:
+  default: {}
+  coolify:
+    external: true
 
 volumes:
   hauldr_pgdata:
