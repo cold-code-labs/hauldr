@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "validate": "tsx src/validate.ts",
     "validate:auth": "tsx src/validate-auth.ts",
-    "validate:sdk": "tsx src/validate-sdk.ts"
+    "validate:sdk": "tsx src/validate-sdk.ts",
+    "validate:coolify": "tsx src/validate-coolify.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

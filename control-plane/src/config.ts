@@ -49,6 +49,20 @@ export const config = {
   // The Docker network the shared stack runs on; per-project GoTrue containers
   // join it to reach `db`. Defaults to the compose project network.
   stackNetwork: process.env.HAULDR_STACK_NETWORK ?? "hauldr_default",
+
+  // Coolify auth provisioner (authProvisioner = "coolify"). Every value comes
+  // from the environment — nothing platform-specific is baked into the code.
+  coolifyApiUrl: process.env.HAULDR_COOLIFY_API_URL ?? "",
+  coolifyToken: process.env.HAULDR_COOLIFY_TOKEN ?? "",
+  coolifyProjectUuid: process.env.HAULDR_COOLIFY_PROJECT_UUID ?? "",
+  coolifyServerUuid: process.env.HAULDR_COOLIFY_SERVER_UUID ?? "",
+  coolifyDestinationUuid: process.env.HAULDR_COOLIFY_DESTINATION_UUID ?? "",
+  coolifyEnvironment: process.env.HAULDR_COOLIFY_ENVIRONMENT ?? "production",
+  // Per-project auth endpoint domain; `{project}` is substituted — e.g.
+  // "auth-{project}.example.com". Routed by your reverse proxy / tunnel.
+  authDomainPattern: process.env.HAULDR_AUTH_DOMAIN_PATTERN ?? "",
+  // GoTrue image (name:tag), used by both the docker and coolify provisioners.
+  gotrueImage: process.env.HAULDR_GOTRUE_IMAGE ?? "supabase/gotrue:v2.190.0",
 };
 
 /** Returns the admin connection string pointed at a specific database. */

@@ -3,52 +3,31 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { adminClient, dbClient, controlPool } from "./db";
 import { config } from "./config";
+import { coolifyProvisionGotrue, coolifyDestroyGotrue } from "./coolify";
 
 const exec = promisify(execFile);
-
-const GOTRUE_IMAGE = process.env.HAULDR_GOTRUE_IMAGE ?? "supabase/gotrue:v2.190.0";
 
 export type ProjectAuth = {
   gotrueUrl: string;
   jwtSecret: string;
-  container: string;
+  /** docker container name, or coolify app uuid — the provisioner's handle. */
+  handle: string;
 };
-
-function dockerParts(): [string, string[]] {
-  const parts = config.dockerCmd.split(" ").filter(Boolean);
-  return [parts[0], parts.slice(1)];
-}
-async function docker(args: string[]) {
-  const [cmd, pre] = dockerParts();
-  return exec(cmd, [...pre, ...args], { maxBuffer: 4 * 1024 * 1024 });
-}
 
 function ident(s: string) {
   return '"' + s.replace(/"/g, '""') + '"';
 }
 
-/** The in-network Postgres URL a per-project GoTrue uses to reach its database. */
+/** The Postgres URL a per-project GoTrue uses to reach its database (in-network). */
 function internalDbUrl(database: string): string {
   const u = new URL(config.adminUrl);
   const user = u.username || "postgres";
   return `postgres://${user}:${u.password}@${config.poolerUpstreamHost}:${config.poolerUpstreamPort}/${database}?sslmode=disable`;
 }
 
-/**
- * Provision a project's auth: its own GoTrue, with its own JWT secret, pointed
- * at the project's database (`auth` schema). One GoTrue per project, always —
- * the canonical Hauldr auth model. Idempotent: re-running replaces the
- * container and reuses the stored secret.
- *
- * This is the Docker reference implementation (self-hosting / dev). A platform
- * that runs services through an orchestrator (Coolify, Nomad, k8s) swaps the
- * container step for an API call — the database preparation and the JWT-secret
- * contract are identical.
- */
-export async function provisionAuth(name: string): Promise<ProjectAuth> {
+/** Prepare a project's db for GoTrue (auth schema + search_path) and ensure a stable JWT secret. */
+async function prepareAuth(name: string): Promise<{ database: string; jwtSecret: string }> {
   const database = `db_${name}`;
-  const container = `hauldr-auth-${name}`;
-
   const prev = await controlPool.query(
     "select jwt_secret from projects where name = $1",
     [name],
@@ -57,9 +36,6 @@ export async function provisionAuth(name: string): Promise<ProjectAuth> {
     (prev.rows[0]?.jwt_secret as string | undefined) ??
     crypto.randomBytes(32).toString("hex");
 
-  // Prepare the project db for GoTrue: an `auth` schema it owns, plus a
-  // search_path so its migrations and runtime resolve there. App data lives in
-  // public/hauldr and is untouched.
   const admin = adminClient();
   await admin.connect();
   try {
@@ -77,13 +53,65 @@ export async function provisionAuth(name: string): Promise<ProjectAuth> {
     await d.end();
   }
 
-  await controlPool.query(
-    "update projects set jwt_secret = $2, gotrue_container = $3 where name = $1",
-    [name, jwtSecret, container],
-  );
+  await controlPool.query("update projects set jwt_secret = $2 where name = $1", [
+    name,
+    jwtSecret,
+  ]);
+  return { database, jwtSecret };
+}
 
-  // (Re)create the GoTrue container on the stack network so it can reach `db`.
-  // Port 0 → let Docker assign a host port; we read it back below.
+/**
+ * Provision a project's auth: its own GoTrue, with its own JWT secret, pointed
+ * at the project's database. One GoTrue per project, always.
+ *
+ * The provisioner is pluggable (HAULDR_AUTH_PROVISIONER):
+ *   - "docker"  → run a container directly (self-host / dev),
+ *   - "coolify" → ask Coolify to run and route it (production).
+ * The database preparation and JWT-secret contract are identical either way.
+ */
+export async function provisionAuth(name: string): Promise<ProjectAuth> {
+  const { database, jwtSecret } = await prepareAuth(name);
+  const dbUrl = internalDbUrl(database);
+
+  const endpoint =
+    config.authProvisioner === "coolify"
+      ? await coolifyProvisionGotrue(name, dbUrl, jwtSecret)
+      : await dockerProvisionGotrue(name, dbUrl, jwtSecret);
+
+  await controlPool.query(
+    "update projects set gotrue_url = $2, gotrue_container = $3 where name = $1",
+    [name, endpoint.gotrueUrl, endpoint.handle],
+  );
+  return { gotrueUrl: endpoint.gotrueUrl, jwtSecret, handle: endpoint.handle };
+}
+
+/** Tear down a project's GoTrue (matches the active provisioner). Idempotent. */
+export async function destroyAuth(name: string): Promise<void> {
+  if (config.authProvisioner === "coolify") {
+    await coolifyDestroyGotrue(name).catch(() => {});
+  } else {
+    await docker(["rm", "-f", `hauldr-auth-${name}`]).catch(() => {});
+  }
+}
+
+// ── Docker reference provisioner ────────────────────────────────────────────
+
+function dockerParts(): [string, string[]] {
+  const parts = config.dockerCmd.split(" ").filter(Boolean);
+  return [parts[0], parts.slice(1)];
+}
+async function docker(args: string[]) {
+  const [cmd, pre] = dockerParts();
+  return exec(cmd, [...pre, ...args], { maxBuffer: 4 * 1024 * 1024 });
+}
+
+async function dockerProvisionGotrue(
+  name: string,
+  dbUrl: string,
+  jwtSecret: string,
+): Promise<{ gotrueUrl: string; handle: string }> {
+  const container = `hauldr-auth-${name}`;
+  // Port 0 → Docker assigns a host port; we read it back below.
   await docker(["rm", "-f", container]).catch(() => {});
   await docker([
     "run", "-d", "--name", container,
@@ -91,7 +119,7 @@ export async function provisionAuth(name: string): Promise<ProjectAuth> {
     "--restart", "unless-stopped",
     "-p", "127.0.0.1:0:9999",
     "-e", "GOTRUE_DB_DRIVER=postgres",
-    "-e", `GOTRUE_DB_DATABASE_URL=${internalDbUrl(database)}`,
+    "-e", `GOTRUE_DB_DATABASE_URL=${dbUrl}`,
     "-e", "GOTRUE_DB_NAMESPACE=auth",
     "-e", `GOTRUE_JWT_SECRET=${jwtSecret}`,
     "-e", "GOTRUE_JWT_AUD=authenticated",
@@ -104,21 +132,15 @@ export async function provisionAuth(name: string): Promise<ProjectAuth> {
     "-e", "GOTRUE_MAILER_AUTOCONFIRM=true",
     "-e", "GOTRUE_API_HOST=0.0.0.0",
     "-e", "PORT=9999",
-    GOTRUE_IMAGE,
+    config.gotrueImage,
   ]);
 
   const { stdout } = await docker(["port", container, "9999/tcp"]);
   const hostPort = stdout.trim().split("\n")[0]?.split(":").pop();
   if (!hostPort) throw new Error(`could not resolve GoTrue host port for ${container}`);
   const gotrueUrl = `http://localhost:${hostPort}`;
-
-  await controlPool.query(
-    "update projects set gotrue_url = $2 where name = $1",
-    [name, gotrueUrl],
-  );
-
   await waitForHealth(gotrueUrl);
-  return { gotrueUrl, jwtSecret, container };
+  return { gotrueUrl, handle: container };
 }
 
 async function waitForHealth(baseUrl: string, tries = 60): Promise<void> {
@@ -132,10 +154,4 @@ async function waitForHealth(baseUrl: string, tries = 60): Promise<void> {
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error(`GoTrue at ${baseUrl} never became healthy`);
-}
-
-/** Tear down a project's GoTrue. Idempotent (a missing container is fine). */
-export async function destroyAuth(name: string): Promise<void> {
-  const container = `hauldr-auth-${name}`;
-  await docker(["rm", "-f", container]).catch(() => {});
 }
