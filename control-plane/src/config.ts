@@ -61,6 +61,12 @@ export const config = {
   // Per-project auth endpoint domain; `{project}` is substituted — e.g.
   // "auth-{project}.example.com". Routed by your reverse proxy / tunnel.
   authDomainPattern: process.env.HAULDR_AUTH_DOMAIN_PATTERN ?? "",
+  // URL scheme for per-project auth endpoints. "https" (default) asks the
+  // orchestrator to obtain a TLS cert. Behind a proxy that terminates TLS at the
+  // edge (e.g. a Cloudflare tunnel), set "http": the origin attempts no cert —
+  // which avoids the orchestrator hanging on ACME for a domain it can't validate
+  // directly — and the edge still serves HTTPS to clients.
+  authScheme: process.env.HAULDR_AUTH_SCHEME ?? "https",
   // GoTrue image (name:tag), used by both the docker and coolify provisioners.
   gotrueImage: process.env.HAULDR_GOTRUE_IMAGE ?? "supabase/gotrue:v2.190.0",
   // Where a per-project GoTrue reaches its database. Defaults to the in-network

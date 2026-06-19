@@ -104,7 +104,7 @@ export async function coolifyProvisionGotrue(
     throw new Error("HAULDR_AUTH_DOMAIN_PATTERN is not set (e.g. 'auth-{project}.example.com')");
   }
   const host = config.authDomainPattern.replace("{project}", name);
-  const gotrueUrl = `https://${host}`;
+  const gotrueUrl = `${config.authScheme}://${host}`;
   const appName = `hauldr-auth-${name}`;
 
   const appUuid = await createDockerImageApp({
