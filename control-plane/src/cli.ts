@@ -1,4 +1,5 @@
 import { createProject, listProjects, destroyProject } from "./provision";
+import { provisionRest, destroyRest } from "./postgrest";
 import { ensureProjectZero, ensureMaster } from "./zero";
 import { config } from "./config";
 
@@ -21,6 +22,19 @@ async function main() {
     case "list":
       console.log(JSON.stringify(await listProjects(), null, 2));
       break;
+    case "rest": {
+      // Turn on the à-la-carte REST (PostgREST) layer for a project.
+      if (!arg) throw new Error("usage: cli rest <name>");
+      const res = await provisionRest(arg);
+      console.log(JSON.stringify(res, null, 2));
+      break;
+    }
+    case "unrest": {
+      if (!arg) throw new Error("usage: cli unrest <name>");
+      await destroyRest(arg);
+      console.log(`rest removed for ${arg}`);
+      break;
+    }
     case "zero": {
       // Prepare project zero's database (idempotent).
       await ensureProjectZero();
@@ -37,7 +51,7 @@ async function main() {
     }
     default:
       console.log(
-        "usage: cli <create <name> | destroy <name> | list | zero | master [email]>",
+        "usage: cli <create <name> | destroy <name> | rest <name> | unrest <name> | list | zero | master [email]>",
       );
   }
   process.exit(0);

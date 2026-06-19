@@ -1,12 +1,12 @@
 import { config } from "./config";
 
 /**
- * Pluggable DNS for per-project auth endpoints.
+ * Pluggable DNS for per-project endpoints (auth, REST).
  *
- * The Coolify provisioner routes a project's GoTrue at an external host
- * (HAULDR_AUTH_DOMAIN_PATTERN, e.g. `auth-acme.example.com`). That host resolves
- * only once a DNS record points it at the edge that fronts this server — for a
- * Cloudflare tunnel, a CNAME to `<tunnel-id>.cfargotunnel.com`.
+ * The Coolify provisioner routes a project's GoTrue / PostgREST at an external
+ * host (e.g. `auth-acme.example.com`, `rest-acme.example.com`). That host
+ * resolves only once a DNS record points it at the edge that fronts this server
+ * — for a Cloudflare tunnel, a CNAME to `<tunnel-id>.cfargotunnel.com`.
  *
  * Backends (HAULDR_DNS_PROVISIONER):
  *   - "none"       → no-op. The operator manages DNS out of band (e.g. one
@@ -60,10 +60,10 @@ async function findRecord(host: string): Promise<CfRecord | null> {
 }
 
 /**
- * Point an auth host at the edge. Idempotent: creates the CNAME, or corrects its
- * target if it drifted, or does nothing if it already matches.
+ * Point an endpoint host at the edge. Idempotent: creates the CNAME, or corrects
+ * its target if it drifted, or does nothing if it already matches.
  */
-export async function ensureAuthDns(host: string): Promise<void> {
+export async function ensureHostDns(host: string): Promise<void> {
   if (config.dnsProvisioner !== "cloudflare") return;
   requireCloudflareConfig();
   const body = {
@@ -85,11 +85,11 @@ export async function ensureAuthDns(host: string): Promise<void> {
 }
 
 /**
- * Remove an auth host's DNS record. Idempotent, and conservative: it only deletes
- * a record that points at our configured target, so a hand-managed or unrelated
- * record at the same name is never touched.
+ * Remove an endpoint host's DNS record. Idempotent, and conservative: it only
+ * deletes a record that points at our configured target, so a hand-managed or
+ * unrelated record at the same name is never touched.
  */
-export async function destroyAuthDns(host: string): Promise<void> {
+export async function destroyHostDns(host: string): Promise<void> {
   if (config.dnsProvisioner !== "cloudflare") return;
   if (!config.cloudflareDnsToken || !config.cloudflareZoneId) return;
   const existing = await findRecord(host);

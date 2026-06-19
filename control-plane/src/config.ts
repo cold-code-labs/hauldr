@@ -61,12 +61,14 @@ export const config = {
   // Per-project auth endpoint domain; `{project}` is substituted — e.g.
   // "auth-{project}.example.com". Routed by your reverse proxy / tunnel.
   authDomainPattern: process.env.HAULDR_AUTH_DOMAIN_PATTERN ?? "",
-  // URL scheme for per-project auth endpoints. "https" (default) asks the
+  // URL scheme for per-project endpoints (auth, REST). "https" (default) asks the
   // orchestrator to obtain a TLS cert. Behind a proxy that terminates TLS at the
   // edge (e.g. a Cloudflare tunnel), set "http": the origin attempts no cert —
   // which avoids the orchestrator hanging on ACME for a domain it can't validate
-  // directly — and the edge still serves HTTPS to clients.
-  authScheme: process.env.HAULDR_AUTH_SCHEME ?? "https",
+  // directly — and the edge still serves HTTPS to clients. HAULDR_AUTH_SCHEME is
+  // honoured as a back-compat alias.
+  endpointScheme:
+    process.env.HAULDR_ENDPOINT_SCHEME ?? process.env.HAULDR_AUTH_SCHEME ?? "https",
   // GoTrue image (name:tag), used by both the docker and coolify provisioners.
   gotrueImage: process.env.HAULDR_GOTRUE_IMAGE ?? "supabase/gotrue:v2.190.0",
   // Where a per-project GoTrue reaches its database. Defaults to the in-network
@@ -78,6 +80,20 @@ export const config = {
   authDbPort: Number(
     process.env.HAULDR_AUTH_DB_PORT ?? process.env.HAULDR_POOLER_UPSTREAM_PORT ?? 5432,
   ),
+
+  // Per-project REST (PostgREST) — the à-la-carte data API. Opt-in per project:
+  // only an instance that wants a raw REST surface over its data turns it on.
+  // The backend (docker / coolify) defaults to whatever auth uses, so a stack
+  // already wired for Coolify auth gets Coolify REST with no extra config.
+  restProvisioner:
+    process.env.HAULDR_REST_PROVISIONER ?? process.env.HAULDR_AUTH_PROVISIONER ?? "docker",
+  // PostgREST image (name:tag). Pinned to a known-good release; PostgREST keeps
+  // old tags published, so a fixed pin is safe.
+  restImage: process.env.HAULDR_REST_IMAGE ?? "postgrest/postgrest:v12.2.3",
+  // Per-project REST endpoint domain; `{project}` is substituted — e.g.
+  // "rest-{project}.example.com". Routed by your reverse proxy / tunnel. Kept
+  // distinct from the auth pattern so the two endpoints never collide.
+  restDomainPattern: process.env.HAULDR_REST_DOMAIN_PATTERN ?? "",
 
   // Per-project auth DNS. The Coolify provisioner routes a project's GoTrue at an
   // external host (HAULDR_AUTH_DOMAIN_PATTERN); that host resolves only once a DNS

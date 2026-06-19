@@ -1,9 +1,9 @@
 # Hauldr — production stack, deployed as a Coolify "Docker Compose" resource.
 #
 # Postgres (shared core) + control plane + project-zero auth (GoTrue) + panel.
-# Per-project GoTrue is NOT here: the control plane provisions one per project
-# on demand as a separate Coolify app (HAULDR_AUTH_PROVISIONER=coolify), on the
-# shared `coolify` network — which is why Postgres joins it with a stable
+# Per-project satellites (GoTrue always; PostgREST à-la-carte) are NOT here: the
+# control plane provisions them per project on demand as separate Coolify apps,
+# on the shared `coolify` network — which is why Postgres joins it with a stable
 # `hauldr-db` alias (what HAULDR_AUTH_DB_HOST points at).
 #
 # The panel is routed at the control plane's domain via Coolify's
@@ -50,6 +50,10 @@ services:
       HAULDR_AUTH_DOMAIN_PATTERN: ${HAULDR_AUTH_DOMAIN_PATTERN}
       HAULDR_AUTH_DB_HOST: hauldr-db
       HAULDR_AUTH_DB_PORT: "5432"
+      # À-la-carte REST (PostgREST) — provisioned per project on demand, as
+      # separate Coolify apps (same backend as auth), routed at their own domain.
+      HAULDR_REST_DOMAIN_PATTERN: ${HAULDR_REST_DOMAIN_PATTERN}
+      HAULDR_REST_IMAGE: ${HAULDR_REST_IMAGE:-postgrest/postgrest:v12.2.3}
       # Project zero — the panel's own auth (GoTrue). The control plane prepares
       # its db at bootstrap and creates the master operator once GoTrue is up.
       HAULDR_JWT_SECRET: ${HAULDR_JWT_SECRET}

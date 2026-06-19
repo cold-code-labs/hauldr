@@ -1,5 +1,5 @@
 import { config } from "./config";
-import { ensureAuthDns, destroyAuthDns } from "./dns";
+import { ensureHostDns, destroyHostDns } from "./dns";
 
 /**
  * Coolify auth provisioner — brings up a per-project GoTrue as a Coolify
@@ -105,7 +105,7 @@ export async function coolifyProvisionGotrue(
     throw new Error("HAULDR_AUTH_DOMAIN_PATTERN is not set (e.g. 'auth-{project}.example.com')");
   }
   const host = config.authDomainPattern.replace("{project}", name);
-  const gotrueUrl = `${config.authScheme}://${host}`;
+  const gotrueUrl = `${config.endpointScheme}://${host}`;
   const appName = `hauldr-auth-${name}`;
 
   const appUuid = await createDockerImageApp({
@@ -137,7 +137,7 @@ export async function coolifyProvisionGotrue(
 
   // Publish the host at the edge, so it routes from outside (no-op unless a DNS
   // provisioner is configured). After deploy: a failed deploy leaves no record.
-  await ensureAuthDns(host);
+  await ensureHostDns(host);
 
   return { gotrueUrl, handle: appUuid };
 }
@@ -146,6 +146,65 @@ export async function coolifyDestroyGotrue(name: string): Promise<void> {
   const appUuid = await findAppByName(`hauldr-auth-${name}`);
   if (appUuid) await destroyApp(appUuid);
   if (config.authDomainPattern) {
-    await destroyAuthDns(config.authDomainPattern.replace("{project}", name));
+    await destroyHostDns(config.authDomainPattern.replace("{project}", name));
+  }
+}
+
+export type CoolifyRestEndpoint = { restUrl: string; handle: string };
+
+/**
+ * Provision a per-project PostgREST as a Coolify docker-image app. PostgREST
+ * connects to the project's database AS THE AUTHENTICATOR ROLE (a non-owner
+ * login role) and SET ROLEs to anon / authenticated per request — so RLS is
+ * enforced. The JWT secret is the project's GoTrue secret, so GoTrue-issued
+ * tokens authenticate REST calls, and `request.jwt.claims` (which the base RLS
+ * functions read) is populated automatically from the bearer token.
+ */
+export async function coolifyProvisionRest(
+  name: string,
+  dbUri: string,
+  jwtSecret: string,
+): Promise<CoolifyRestEndpoint> {
+  if (!config.restDomainPattern) {
+    throw new Error("HAULDR_REST_DOMAIN_PATTERN is not set (e.g. 'rest-{project}.example.com')");
+  }
+  const host = config.restDomainPattern.replace("{project}", name);
+  const restUrl = `${config.endpointScheme}://${host}`;
+  const appName = `hauldr-rest-${name}`;
+
+  const appUuid = await createDockerImageApp({
+    name: appName,
+    image: config.restImage,
+    portsExposes: "3000",
+    domain: restUrl,
+  });
+
+  const env: Record<string, string> = {
+    PGRST_DB_URI: dbUri,
+    PGRST_DB_SCHEMAS: "public",
+    PGRST_DB_ANON_ROLE: "anon",
+    PGRST_JWT_SECRET: jwtSecret,
+    // Match GoTrue's audience so its tokens validate here.
+    PGRST_JWT_AUD: "authenticated",
+    // Use the single JSON `request.jwt.claims` GUC (what the base RLS reads),
+    // not the legacy per-claim GUCs.
+    PGRST_DB_USE_LEGACY_GUCS: "false",
+    PGRST_SERVER_PORT: "3000",
+    // The public URL, so the served OpenAPI advertises the right base.
+    PGRST_OPENAPI_SERVER_PROXY_URI: restUrl,
+  };
+  for (const [k, v] of Object.entries(env)) await setEnv(appUuid, k, v);
+  await deployApp(appUuid);
+
+  await ensureHostDns(host);
+
+  return { restUrl, handle: appUuid };
+}
+
+export async function coolifyDestroyRest(name: string): Promise<void> {
+  const appUuid = await findAppByName(`hauldr-rest-${name}`);
+  if (appUuid) await destroyApp(appUuid);
+  if (config.restDomainPattern) {
+    await destroyHostDns(config.restDomainPattern.replace("{project}", name));
   }
 }

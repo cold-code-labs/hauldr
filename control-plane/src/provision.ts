@@ -11,6 +11,7 @@ import {
   poolerConnectionString,
 } from "./supavisor";
 import { provisionAuth, destroyAuth, type ProjectAuth } from "./gotrue";
+import { destroyRest } from "./postgrest";
 
 const SLUG = /^[a-z][a-z0-9_]{1,40}$/;
 
@@ -150,6 +151,7 @@ export async function provisionDatabase(name: string): Promise<Project> {
 
 /**
  * Tear down a project — the inverse of createProject:
+ *  - stop the project's PostgREST, if any (releases its db connections)
  *  - stop the project's GoTrue (releases its connections to the db)
  *  - deregister the Supavisor tenant (release pooler connections)
  *  - drop the database (FORCE — terminate any straggler backends; pg ≥ 13)
@@ -178,7 +180,9 @@ export async function destroyProject(
   const externalId =
     (reg.rows[0]?.tenant_external_id as string | undefined) ?? name;
 
-  // 1. Stop the project's GoTrue first, so it stops reconnecting to the db.
+  // 1. Stop the project's satellites first, so they stop reconnecting to the db.
+  //    REST is à-la-carte (may not exist) — destroyRest is idempotent.
+  await destroyRest(name);
   if (config.authProvisioner !== "none") {
     await destroyAuth(name);
   }
