@@ -77,6 +77,7 @@ createProject("acme")
    ├─ register the route in the pooler
    ├─ run the project's migrations
    ├─ bring up the project's auth (GoTrue) + generate its JWT secret
+   ├─ publish its auth endpoint (auth-acme.<domain>) at the edge
    └─ create a bucket for the project
    →  returns a connection string + keys
 ```
@@ -96,7 +97,34 @@ Self-hosting means a few things are yours to own:
 - **Secrets.** JWT secrets, service tokens, and database credentials live with
   your deployment; rotate them as you would any production secret.
 - **TLS / routing.** A reverse proxy terminates TLS and routes the panel and the
-  per-project endpoints.
+  per-project endpoints — see [Routing per-project auth](#routing-per-project-auth)
+  for how those hostnames get their DNS.
+
+## Routing per-project auth
+
+Each project's auth (GoTrue) is reachable at its own host, derived from
+`HAULDR_AUTH_DOMAIN_PATTERN` — e.g. `auth-{project}.example.com` yields
+`auth-acme.example.com`. The reverse proxy in front of the stack routes that host
+to the project's auth service; the host just needs **DNS** pointing at that edge.
+
+Two ways to manage that DNS:
+
+- **Operator-managed (default).** Point one wildcard record at the edge — a single
+  `*.example.com` covers every project's auth host. The control plane touches no
+  DNS; this is `HAULDR_DNS_PROVISIONER=none`, the default, so the stock build
+  needs no DNS credentials.
+- **Automatic.** Let the control plane publish a record per project on create and
+  retract it on teardown, through a pluggable DNS provisioner. The Cloudflare
+  backend (`HAULDR_DNS_PROVISIONER=cloudflare`) upserts a CNAME to a configured
+  target (`HAULDR_DNS_TARGET`, e.g. a tunnel hostname) with a scoped API token —
+  useful when a wildcard can't cover the hosts, for instance when auth sits behind
+  a different edge than the rest of your domain. Teardown only removes a record it
+  owns (one pointing at the configured target).
+
+The endpoint's scheme follows `HAULDR_AUTH_SCHEME`: `https` by default, or `http`
+when TLS is terminated at the edge (e.g. a tunnel), so the origin never blocks on
+issuing a certificate for a name it can't validate directly. See
+[`.env.example`](../.env.example) for the full set of variables.
 
 ## Tiering a project later
 
