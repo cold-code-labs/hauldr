@@ -78,6 +78,24 @@ export const config = {
   authDbPort: Number(
     process.env.HAULDR_AUTH_DB_PORT ?? process.env.HAULDR_POOLER_UPSTREAM_PORT ?? 5432,
   ),
+
+  // Per-project auth DNS. The Coolify provisioner routes a project's GoTrue at an
+  // external host (HAULDR_AUTH_DOMAIN_PATTERN); that host resolves only once a DNS
+  // record points it at the edge in front of this server.
+  //   - "none"       → the operator manages DNS out of band (e.g. one wildcard
+  //                    record covering every auth host). The default — the public
+  //                    build needs no DNS credentials.
+  //   - "cloudflare" → upsert / remove a CNAME via the Cloudflare API. The token,
+  //                    zone, and target are all configuration; nothing about a
+  //                    specific domain or account is baked into the code.
+  dnsProvisioner: process.env.HAULDR_DNS_PROVISIONER ?? "none",
+  cloudflareDnsToken: process.env.CLOUDFLARE_DNS_TOKEN ?? "",
+  cloudflareZoneId: process.env.CLOUDFLARE_ZONE_ID ?? "",
+  // What an auth host points at — e.g. a tunnel hostname "<id>.cfargotunnel.com",
+  // or any edge / load-balancer hostname that fronts this server.
+  dnsTarget: process.env.HAULDR_DNS_TARGET ?? "",
+  // Whether the record runs through the CDN/proxy (Cloudflare's "orange cloud").
+  dnsProxied: (process.env.HAULDR_DNS_PROXIED ?? "true") !== "false",
 };
 
 /** Returns the admin connection string pointed at a specific database. */

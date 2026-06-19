@@ -1,4 +1,5 @@
 import { config } from "./config";
+import { ensureAuthDns, destroyAuthDns } from "./dns";
 
 /**
  * Coolify auth provisioner — brings up a per-project GoTrue as a Coolify
@@ -134,10 +135,17 @@ export async function coolifyProvisionGotrue(
   for (const [k, v] of Object.entries(env)) await setEnv(appUuid, k, v);
   await deployApp(appUuid);
 
+  // Publish the host at the edge, so it routes from outside (no-op unless a DNS
+  // provisioner is configured). After deploy: a failed deploy leaves no record.
+  await ensureAuthDns(host);
+
   return { gotrueUrl, handle: appUuid };
 }
 
 export async function coolifyDestroyGotrue(name: string): Promise<void> {
   const appUuid = await findAppByName(`hauldr-auth-${name}`);
   if (appUuid) await destroyApp(appUuid);
+  if (config.authDomainPattern) {
+    await destroyAuthDns(config.authDomainPattern.replace("{project}", name));
+  }
 }
