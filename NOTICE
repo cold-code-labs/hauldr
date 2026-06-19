@@ -1,0 +1,14 @@
+Hauldr
+Copyright 2026 The Hauldr Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It builds on, and is designed to be deployed alongside, the following
+independent open-source projects, each under its own license and copyright:
+
+  - PostgreSQL          https://www.postgresql.org/
+  - Supavisor           https://github.com/supabase/supavisor
+  - GoTrue              https://github.com/supabase/auth
+  - PostgREST           https://postgrest.org/
+  - Garage              https://garagehq.deuxfleurs.fr/
+  - Drizzle ORM         https://orm.drizzle.team/
