@@ -1,16 +1,17 @@
 # Hauldr — production stack, deployed as a Coolify "Docker Compose" resource.
 #
-# Postgres (the shared core) + the control plane. Per-project GoTrue is NOT in
-# here: the control plane provisions one per project on demand as a separate
-# Coolify app (HAULDR_AUTH_PROVISIONER=coolify). Those apps live on the shared
-# `coolify` network, so Postgres joins it too with a stable `hauldr-db` alias —
-# which is what HAULDR_AUTH_DB_HOST points at.
+# Postgres (shared core) + control plane + project-zero auth (GoTrue) + panel.
+# Per-project GoTrue is NOT here: the control plane provisions one per project
+# on demand as a separate Coolify app (HAULDR_AUTH_PROVISIONER=coolify), on the
+# shared `coolify` network — which is why Postgres joins it with a stable
+# `hauldr-db` alias (what HAULDR_AUTH_DB_HOST points at).
 #
-# The control plane is routed at its domain via Coolify's docker_compose_domains.
+# The panel is routed at the control plane's domain via Coolify's
+# docker_compose_domains (service: panel). The management API is published only
+# on surtr's private WireGuard IP (10.10.0.2:8787) — internal services reach it
+# as control-plane:8787; Heimdall reaches it across WireGuard. Never public.
 #
-# Multi-tenant pooling (Supavisor) is added once the basics are green — see
-# docker-compose.yml for the pooler service shape. Until then the control plane
-# uses direct connections (HAULDR_POOLER_API_URL unset).
+# Multi-tenant pooling (Supavisor) is layered in once this is green.
 services:
   hauldr-db:
     image: postgres:16-alpine
@@ -39,6 +40,7 @@ services:
       HAULDR_DB_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@hauldr-db:5432/postgres
       HAULDR_API_PORT: "8787"
       HAULDR_API_KEY: ${HAULDR_API_KEY}
+      # Per-project auth — provisioned as separate Coolify apps on surtr.
       HAULDR_AUTH_PROVISIONER: coolify
       HAULDR_COOLIFY_API_URL: ${HAULDR_COOLIFY_API_URL}
       HAULDR_COOLIFY_TOKEN: ${HAULDR_COOLIFY_TOKEN}
@@ -48,11 +50,74 @@ services:
       HAULDR_AUTH_DOMAIN_PATTERN: ${HAULDR_AUTH_DOMAIN_PATTERN}
       HAULDR_AUTH_DB_HOST: hauldr-db
       HAULDR_AUTH_DB_PORT: "5432"
+      # Project zero — the panel's own auth (GoTrue). The control plane prepares
+      # its db at bootstrap and creates the master operator once GoTrue is up.
+      HAULDR_JWT_SECRET: ${HAULDR_JWT_SECRET}
+      HAULDR_ZERO_DB: hauldr_zero
+      HAULDR_GOTRUE_URL: http://auth:9999
+      HAULDR_MASTER_EMAIL: ${HAULDR_MASTER_EMAIL}
+      HAULDR_MASTER_PASSWORD: ${HAULDR_MASTER_PASSWORD}
     depends_on:
       hauldr-db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8787/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    # Management API bound to a private address only (never the public internet).
+    # Default localhost; set HAULDR_API_BIND_IP to a private/WireGuard IP so other
+    # hosts (e.g. an orchestrator) can reach it across the private link.
+    ports:
+      - "${HAULDR_API_BIND_IP:-127.0.0.1}:8787:8787"
+    networks:
+      default: {}
+      coolify: {}
+    restart: unless-stopped
+
+  # Project-zero auth. Starts after the control plane prepared hauldr_zero
+  # (schema + search_path), so GoTrue migrates cleanly on first boot.
+  auth:
+    image: supabase/gotrue:v2.190.0
+    environment:
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@hauldr-db:5432/hauldr_zero?sslmode=disable
+      GOTRUE_DB_NAMESPACE: auth
+      GOTRUE_SITE_URL: ${HAULDR_SITE_URL:-https://hauldr.coldcodelabs.com}
+      GOTRUE_API_EXTERNAL_URL: ${HAULDR_SITE_URL:-https://hauldr.coldcodelabs.com}
+      API_EXTERNAL_URL: ${HAULDR_SITE_URL:-https://hauldr.coldcodelabs.com}
+      GOTRUE_JWT_SECRET: ${HAULDR_JWT_SECRET}
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_API_HOST: 0.0.0.0
+      PORT: "9999"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    networks:
+      default: {}
+    restart: unless-stopped
+
+  # Control panel (Next.js). Routed at the control plane's domain via Coolify's
+  # docker_compose_domains. Talks to the control plane over the internal network
+  # with the bearer key; authenticates operators against project-zero GoTrue.
+  panel:
+    build:
+      context: ./panel
+      dockerfile: Dockerfile
+    environment:
+      HAULDR_API_URL: http://control-plane:8787
+      HAULDR_API_KEY: ${HAULDR_API_KEY}
+      HAULDR_GOTRUE_URL: http://auth:9999
+      HAULDR_JWT_SECRET: ${HAULDR_JWT_SECRET}
+    depends_on:
+      control-plane:
+        condition: service_healthy
     expose:
-      - "8787"
+      - "3000"
     networks:
       default: {}
       coolify: {}
