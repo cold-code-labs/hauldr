@@ -45,6 +45,41 @@ async function ensureMasterWhenReady() {
   console.warn("master bootstrap: GoTrue never became reachable");
 }
 
+app.get("/", (c) =>
+  c.html(`<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Hauldr</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    color: #e7e5e4; background: radial-gradient(1200px 600px at 50% -10%, #1c1917, #0c0a09); }
+  main { max-width: 40rem; padding: 3rem 1.5rem; }
+  h1 { font-size: clamp(2.5rem, 8vw, 4rem); margin: 0 0 .25rem; letter-spacing: -.03em; }
+  .tag { color: #a8a29e; font-size: 1.15rem; margin: 0 0 2rem; }
+  blockquote { border-left: 2px solid #44403c; margin: 0 0 2rem; padding: .25rem 0 .25rem 1rem;
+    color: #d6d3d1; font-style: italic; }
+  .meta { display: flex; gap: 1.25rem; flex-wrap: wrap; color: #78716c; font-size: .9rem; }
+  a { color: #d6d3d1; }
+  code { color: #fafaf9; background: #292524; padding: .1rem .4rem; border-radius: .3rem; font-size: .85em; }
+</style></head>
+<body><main>
+  <h1>Hauldr</h1>
+  <p class="tag">A multi-tenant, self-hostable backend on real Postgres.</p>
+  <blockquote>In Old Norse law, a <strong>hauldr</strong> was a freeholder — someone who held
+  their land outright, answering to no lord. Hauldr is a backend you hold the same way:
+  your data, your Postgres, your box.</blockquote>
+  <p>This is a live control plane. Projects are provisioned through its management API;
+  each gets a database, row-level security, and its own auth — measured in megabytes, not gigabytes.</p>
+  <div class="meta">
+    <span><a href="https://github.com/cold-code-labs/hauldr">GitHub</a></span>
+    <span>status: <a href="/health">/health</a></span>
+    <span>pre-alpha</span>
+  </div>
+</main></body></html>`),
+);
+
 app.get("/health", (c) => c.json({ ok: true, service: "hauldr-control-plane" }));
 
 app.get("/v1/projects", async (c) => c.json(await listProjects()));

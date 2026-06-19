@@ -63,6 +63,15 @@ export const config = {
   authDomainPattern: process.env.HAULDR_AUTH_DOMAIN_PATTERN ?? "",
   // GoTrue image (name:tag), used by both the docker and coolify provisioners.
   gotrueImage: process.env.HAULDR_GOTRUE_IMAGE ?? "supabase/gotrue:v2.190.0",
+  // Where a per-project GoTrue reaches its database. Defaults to the in-network
+  // `db` (the docker provisioner joins that network). In a split deploy — e.g.
+  // GoTrue as separate Coolify apps — point this at the shared Postgres's
+  // address on the shared network.
+  authDbHost:
+    process.env.HAULDR_AUTH_DB_HOST ?? process.env.HAULDR_POOLER_UPSTREAM_HOST ?? "db",
+  authDbPort: Number(
+    process.env.HAULDR_AUTH_DB_PORT ?? process.env.HAULDR_POOLER_UPSTREAM_PORT ?? 5432,
+  ),
 };
 
 /** Returns the admin connection string pointed at a specific database. */

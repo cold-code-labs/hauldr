@@ -22,7 +22,7 @@ function ident(s: string) {
 function internalDbUrl(database: string): string {
   const u = new URL(config.adminUrl);
   const user = u.username || "postgres";
-  return `postgres://${user}:${u.password}@${config.poolerUpstreamHost}:${config.poolerUpstreamPort}/${database}?sslmode=disable`;
+  return `postgres://${user}:${u.password}@${config.authDbHost}:${config.authDbPort}/${database}?sslmode=disable`;
 }
 
 /** Prepare a project's db for GoTrue (auth schema + search_path) and ensure a stable JWT secret. */
