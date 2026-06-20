@@ -145,6 +145,13 @@ export function Icon({ name }: { name: string }) {
           <path d="m5 12 5 5L20 7" />
         </svg>
       );
+    case "search":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+      );
     default:
       return null;
   }

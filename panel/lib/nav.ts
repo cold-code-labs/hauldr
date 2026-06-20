@@ -17,6 +17,7 @@ export const ORG_NAV: NavGroup[] = [
     label: "Overview",
     items: [
       { label: "Dashboard", href: "/", icon: "dashboard", ready: true },
+      { label: "Organizations", href: "/organizations", icon: "building", ready: true },
       { label: "Projects", href: "/projects", icon: "projects", ready: true },
     ],
   },

@@ -1352,3 +1352,154 @@ h3 {
   width: 13px;
   height: 13px;
 }
+
+/* ---------- Organizations (All organizations grid) ---------- */
+.org-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.org-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.org-search:focus-within {
+  border-color: var(--cyan-strong);
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.13);
+}
+.org-search svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--faint);
+}
+.org-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 10px 0;
+}
+.org-search-input::placeholder {
+  color: var(--faint);
+}
+
+.org-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+.org-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 16px 16px 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.06s;
+}
+.org-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 1px 2px rgba(18, 24, 40, 0.05),
+    0 14px 34px -18px rgba(18, 24, 40, 0.26);
+  transform: translateY(-1px);
+}
+.org-card:active {
+  transform: translateY(0);
+}
+.org-card:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.org-card.active {
+  border-color: rgba(2, 132, 199, 0.4);
+  box-shadow: var(--shadow), 0 0 0 1px rgba(2, 132, 199, 0.25) inset;
+}
+.org-card-mark {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--aurora);
+}
+.org-card-mark svg {
+  width: 20px;
+  height: 20px;
+}
+.org-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.org-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.org-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.org-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cyan-strong);
+  background: rgba(2, 132, 199, 0.08);
+  border: 1px solid rgba(2, 132, 199, 0.22);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.org-card-active {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--success);
+  background: rgba(21, 163, 74, 0.09);
+  border: 1px solid rgba(21, 163, 74, 0.22);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.org-card-chev {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+}
+.org-card-chev svg {
+  width: 17px;
+  height: 17px;
+  transform: rotate(-90deg);
+}
