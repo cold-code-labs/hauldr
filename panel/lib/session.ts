@@ -28,7 +28,9 @@ export function verify(token: string): Session | null {
 
   try {
     const claims = JSON.parse(Buffer.from(p, "base64url").toString("utf8"));
-    if (claims.exp && claims.exp * 1000 < Date.now()) return null;
+    // Fail closed: a session token must carry a valid, unexpired `exp`.
+    if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp)) return null;
+    if (claims.exp * 1000 < Date.now()) return null;
     return claims as Session;
   } catch {
     return null;
