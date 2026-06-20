@@ -1,15 +1,19 @@
 import { AuthClient } from "./auth";
 import { DbClient } from "./db";
 import { S3FilesClient } from "./files";
-import type { HauldrConfig, FilesClient, LiveClient } from "./types";
+import { RealtimeClient } from "./live";
+import type { HauldrConfig, FilesClient, LiveClient, LiveMessage } from "./types";
 
 export * from "./types";
 export { AuthClient } from "./auth";
 export { DbClient, UserScopedDb } from "./db";
 export { S3FilesClient } from "./files";
+export { RealtimeClient } from "./live";
 
-function pending(method: string): never {
-  throw new Error(`hauldr.${method} is not implemented yet (pre-alpha) — see the roadmap`);
+function liveUnconfigured(method: string): never {
+  throw new Error(
+    `hauldr.live.${method} needs config: createClient({ realtime: { url, accessToken } })`,
+  );
 }
 
 function filesUnconfigured(method: string): never {
@@ -25,7 +29,9 @@ const filesStub: FilesClient = {
 };
 
 const liveStub: LiveClient = {
-  on: () => pending("live.on"),
+  on: (): { unsubscribe(): void } => liveUnconfigured("on"),
+  broadcast: (_topic: string, _event: string, _payload: LiveMessage["payload"]): Promise<void> =>
+    liveUnconfigured("broadcast"),
 };
 
 export type HauldrClient = {
@@ -37,8 +43,8 @@ export type HauldrClient = {
 
 /**
  * Create a Hauldr client. `auth` works anywhere; `db` is server-only and needs
- * `db.connectionString`. `files` and `live` are part of the surface but land in
- * a later milestone (they throw a clear not-implemented for now).
+ * `db.connectionString`. `files` needs `storage`; `live` needs `realtime`.
+ * Namespaces left unconfigured throw a clear message pointing at the config.
  */
 export function createClient(config: HauldrConfig): HauldrClient {
   const auth = new AuthClient(config.url);
@@ -54,6 +60,6 @@ export function createClient(config: HauldrConfig): HauldrClient {
       return db;
     },
     files: config.storage ? new S3FilesClient(config.storage) : filesStub,
-    live: liveStub,
+    live: config.realtime ? new RealtimeClient(config.realtime) : liveStub,
   };
 }

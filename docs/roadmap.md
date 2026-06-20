@@ -27,6 +27,10 @@ These are closed; listed here so the rationale is on record.
 - **Access control** → row-level security, always on.
 - **Data access** → server actions by default; REST layer à-la-carte.
 - **Storage** → shared S3-compatible object store, one bucket per project.
+- **Realtime** → a single shared, multi-tenant Realtime service (each project is a
+  tenant). Broadcast + presence over WebSocket are the primary model — including
+  app-driven broadcast (a server action publishes after a write). `postgres-changes`
+  (CDC) is optional and needs a Postgres build with the `wal2json` output plugin.
 - **License** → Apache 2.0; public repository from day one.
 - **Dogfooding** → the panel runs as a Hauldr project, bootstrapped via project
   zero.

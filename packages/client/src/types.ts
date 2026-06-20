@@ -21,6 +21,19 @@ export type HauldrConfig = {
   db?: { connectionString: string };
   /** Server-only: the project's S3 bucket + credentials, used by `hauldr.files`. */
   storage?: StorageConfig;
+  /** The project's Realtime endpoint, used by `hauldr.live`. */
+  realtime?: RealtimeConfig;
+};
+
+/** Connection for the project's shared Realtime service (broadcast / presence). */
+export type RealtimeConfig = {
+  /** Realtime base URL, e.g. https://realtime-<project>.example.com. The client
+   *  derives the WebSocket URL (ws/wss) for subscribes and posts to /api/broadcast
+   *  for publishes. The host's first label selects the project (Realtime tenant). */
+  url: string;
+  /** The signed-in user's access token — authorizes the channel + applies RLS.
+   *  Server-side publishes may use the project anon/service token instead. */
+  accessToken?: string;
 };
 
 /** S3 connection for a project's object storage (its own bucket + scoped key). */
@@ -55,7 +68,17 @@ export interface FilesClient {
   remove(group: string, key: string): Promise<void>;
 }
 
-/** Realtime over SSE (pre-alpha — not yet implemented). */
+/** One Realtime broadcast message: a named event with a JSON payload. */
+export type LiveMessage = { event: string; payload: unknown };
+
+/**
+ * Realtime over the shared, multi-tenant Realtime service (WebSocket).
+ *   on(topic, cb)            — subscribe to a topic; cb fires per broadcast event.
+ *   broadcast(topic, e, pl)  — publish an event to a topic (e.g. from a server
+ *                              action right after a write — the app-driven model).
+ * Presence and postgres-changes ride the same socket and land in a later pass.
+ */
 export interface LiveClient {
-  on(channel: string, cb: (change: unknown) => void): { unsubscribe(): void };
+  on(topic: string, cb: (message: LiveMessage) => void): { unsubscribe(): void };
+  broadcast(topic: string, event: string, payload: unknown): Promise<void>;
 }
