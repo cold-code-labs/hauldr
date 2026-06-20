@@ -1,19 +1,27 @@
 import { AuthClient } from "./auth";
 import { DbClient } from "./db";
+import { S3FilesClient } from "./files";
 import type { HauldrConfig, FilesClient, LiveClient } from "./types";
 
 export * from "./types";
 export { AuthClient } from "./auth";
 export { DbClient, UserScopedDb } from "./db";
+export { S3FilesClient } from "./files";
 
 function pending(method: string): never {
   throw new Error(`hauldr.${method} is not implemented yet (pre-alpha) — see the roadmap`);
 }
 
+function filesUnconfigured(method: string): never {
+  throw new Error(
+    `hauldr.files.${method} needs server-side config: createClient({ storage: { endpoint, bucket, accessKeyId, secretAccessKey } })`,
+  );
+}
+
 const filesStub: FilesClient = {
-  upload: () => pending("files.upload"),
-  getSignedUrl: () => pending("files.getSignedUrl"),
-  remove: () => pending("files.remove"),
+  upload: () => filesUnconfigured("upload"),
+  getSignedUrl: () => filesUnconfigured("getSignedUrl"),
+  remove: () => filesUnconfigured("remove"),
 };
 
 const liveStub: LiveClient = {
@@ -45,7 +53,7 @@ export function createClient(config: HauldrConfig): HauldrClient {
       }
       return db;
     },
-    files: filesStub,
+    files: config.storage ? new S3FilesClient(config.storage) : filesStub,
     live: liveStub,
   };
 }
