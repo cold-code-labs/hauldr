@@ -12,6 +12,7 @@ import {
 } from "./supavisor";
 import { provisionAuth, destroyAuth, type ProjectAuth } from "./gotrue";
 import { destroyRest } from "./postgrest";
+import { defaultOrgId } from "./orgs";
 
 const SLUG = /^[a-z][a-z0-9_]{1,40}$/;
 
@@ -117,13 +118,15 @@ export async function provisionDatabase(name: string): Promise<Project> {
     await target.end();
   }
 
+  const organizationId = await defaultOrgId();
   await controlPool.query(
-    `insert into projects (name, database, role, db_password, tenant_external_id)
-       values ($1, $2, $3, $4, $5)
+    `insert into projects (name, database, role, db_password, tenant_external_id, organization_id)
+       values ($1, $2, $3, $4, $5, $6)
      on conflict (name) do update
        set db_password = excluded.db_password,
-           tenant_external_id = excluded.tenant_external_id`,
-    [name, database, role, password, externalId],
+           tenant_external_id = excluded.tenant_external_id,
+           organization_id = coalesce(projects.organization_id, excluded.organization_id)`,
+    [name, database, role, password, externalId, organizationId],
   );
 
   // Route the project through the pooler when one is configured: the
@@ -209,11 +212,14 @@ export async function destroyProject(
   return { name, database, dropped: true };
 }
 
-export async function listProjects() {
+export async function listProjects(organizationId?: string) {
   const { rows } = await controlPool.query(
     `select name, database, role, status, status_detail,
-            gotrue_url, postgrest_url, rest_requested, created_at
-       from projects order by created_at`,
+            gotrue_url, postgrest_url, rest_requested, organization_id, created_at
+       from projects
+      where $1::uuid is null or organization_id = $1::uuid
+      order by created_at`,
+    [organizationId ?? null],
   );
   return rows;
 }

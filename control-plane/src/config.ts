@@ -26,6 +26,10 @@ export const config = {
   gotrueUrl: process.env.HAULDR_GOTRUE_URL ?? "http://localhost:9999",
   masterEmail: process.env.HAULDR_MASTER_EMAIL ?? "admin@example.com",
   masterPassword: process.env.HAULDR_MASTER_PASSWORD ?? "",
+  // Name of the default organization (tenant zero) for an unattended install —
+  // when env master creds are present, the bootstrap creates it automatically.
+  // A fresh install with no env master is set up through the first-run wizard.
+  defaultOrgName: process.env.HAULDR_ORG_NAME ?? "My Organization",
 
   // Supavisor pooler. Empty apiUrl/secret = disabled (direct connection).
   poolerApiUrl: process.env.HAULDR_POOLER_API_URL ?? "",

@@ -61,6 +61,9 @@ services:
       HAULDR_GOTRUE_URL: http://auth:9999
       HAULDR_MASTER_EMAIL: ${HAULDR_MASTER_EMAIL}
       HAULDR_MASTER_PASSWORD: ${HAULDR_MASTER_PASSWORD}
+      # Default organization (tenant zero) name for this unattended install. The
+      # bootstrap creates it and adopts any existing projects into it.
+      HAULDR_ORG_NAME: ${HAULDR_ORG_NAME:-My Organization}
     depends_on:
       hauldr-db:
         condition: service_healthy

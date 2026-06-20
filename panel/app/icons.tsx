@@ -87,6 +87,64 @@ export function Icon({ name }: { name: string }) {
           <path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3M10 12h9M16 9l3 3-3 3" />
         </svg>
       );
+    case "dashboard":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <rect x="3" y="3" width="7" height="9" rx="1.5" />
+          <rect x="14" y="3" width="7" height="5" rx="1.5" />
+          <rect x="14" y="12" width="7" height="9" rx="1.5" />
+          <rect x="3" y="16" width="7" height="5" rx="1.5" />
+        </svg>
+      );
+    case "overview":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      );
+    case "building":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 21V9h4a1 1 0 0 1 1 1v11M3 21h18M8 8h3M8 12h3M8 16h3" />
+        </svg>
+      );
+    case "plus":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      );
+    case "chevron":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      );
+    case "back":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <path d="M19 12H5M11 18l-6-6 6-6" />
+        </svg>
+      );
+    case "power":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <path d="M12 4v8M7.5 7a7 7 0 1 0 9 0" />
+        </svg>
+      );
+    case "trash":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
+        </svg>
+      );
+    case "check":
+      return (
+        <svg viewBox="0 0 24 24" {...P}>
+          <path d="m5 12 5 5L20 7" />
+        </svg>
+      );
     default:
       return null;
   }

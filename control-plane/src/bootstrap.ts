@@ -3,6 +3,7 @@ import { applyMigrations } from "./migrate";
 import { controlMigrationsDir } from "./paths";
 import { config } from "./config";
 import { ensureProjectZero } from "./zero";
+import { ensureDefaultOrganization, adoptOrphanProjects } from "./orgs";
 
 /** Create the control db (`hauldr`) if missing and apply its migrations. */
 export async function bootstrap() {
@@ -38,6 +39,20 @@ export async function bootstrap() {
   if (config.jwtSecret) {
     await ensureProjectZero();
     console.log(`project zero db ready: ${config.zeroDb}`);
+  }
+
+  // Unattended install: when a master operator is configured via the environment
+  // (HAULDR_MASTER_*), the install is meant to come up ready — so ensure the
+  // default organization (tenant zero) exists and adopt any orphan projects into
+  // it. A fresh install with no env master stays uninitialized until the
+  // first-run wizard creates the master + organization.
+  if (config.jwtSecret && config.masterPassword) {
+    const org = await ensureDefaultOrganization(config.defaultOrgName);
+    const adopted = await adoptOrphanProjects(org.id);
+    console.log(
+      `default organization ready: ${org.name} (${org.slug})` +
+        (adopted ? ` — adopted ${adopted} orphan project(s)` : ""),
+    );
   }
 
   // Supavisor metadata db — Supavisor's own `migrate` populates it, but the

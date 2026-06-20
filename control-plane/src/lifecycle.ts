@@ -3,10 +3,11 @@ import { config } from "./config";
 import { provisionDatabase } from "./provision";
 import { provisionAuth } from "./gotrue";
 import { provisionRest } from "./postgrest";
+import { defaultOrgId } from "./orgs";
 
 const SLUG = /^[a-z][a-z0-9_]{1,40}$/;
 
-export type ProvisionOpts = { rest?: boolean };
+export type ProvisionOpts = { rest?: boolean; organizationId?: string };
 
 /**
  * The internal DB URL for an app that runs on the SAME server (shared Docker
@@ -39,13 +40,15 @@ export async function startProvision(
   }
   const database = `db_${name}`;
   const role = `${name}_authenticator`;
+  const organizationId = opts.organizationId ?? (await defaultOrgId());
   await controlPool.query(
-    `insert into projects (name, database, role, status, rest_requested)
-       values ($1, $2, $3, 'provisioning', $4)
+    `insert into projects (name, database, role, status, rest_requested, organization_id)
+       values ($1, $2, $3, 'provisioning', $4, $5)
      on conflict (name) do update
        set status = 'provisioning', status_detail = null,
-           rest_requested = excluded.rest_requested`,
-    [name, database, role, !!opts.rest],
+           rest_requested = excluded.rest_requested,
+           organization_id = coalesce(projects.organization_id, excluded.organization_id)`,
+    [name, database, role, !!opts.rest, organizationId],
   );
   void provisionInBackground(name, opts);
   return { name, status: "provisioning" };

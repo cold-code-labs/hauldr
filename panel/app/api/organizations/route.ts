@@ -1,26 +1,22 @@
 import { NextResponse } from "next/server";
 import { getSession } from "../../../lib/session";
-import { currentOrgId } from "../../../lib/org";
 import { API, authHeaders } from "../../../lib/api";
 
-/** List projects in the active organization. Session-gated. */
+/** List organizations (with project counts). Session-gated. */
 export async function GET() {
   if (!(await getSession())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const org = await currentOrgId();
-  const qs = org ? `?org=${encodeURIComponent(org)}` : "";
-  const res = await fetch(`${API}/v1/projects${qs}`, { cache: "no-store", headers: authHeaders() });
+  const res = await fetch(`${API}/v1/organizations`, { cache: "no-store", headers: authHeaders() });
   return NextResponse.json(await res.json().catch(() => []), { status: res.status });
 }
 
-/** Provision a new project (async) in the active organization. Body: { name, rest? }. */
+/** Create an organization. Body: { name }. */
 export async function POST(req: Request) {
   if (!(await getSession())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const body = (await req.json().catch(() => ({}))) as { name?: string; rest?: boolean };
-  const organizationId = (await currentOrgId()) || undefined;
-  const res = await fetch(`${API}/v1/projects`, {
+  const body = (await req.json().catch(() => ({}))) as { name?: string };
+  const res = await fetch(`${API}/v1/organizations`, {
     method: "POST",
     headers: authHeaders({ "content-type": "application/json" }),
-    body: JSON.stringify({ name: body.name, rest: !!body.rest, organizationId }),
+    body: JSON.stringify({ name: body.name }),
   });
   return NextResponse.json(await res.json().catch(() => ({})), { status: res.status });
 }

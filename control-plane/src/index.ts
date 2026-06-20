@@ -4,6 +4,12 @@ import { listProjects, destroyProject } from "./provision";
 import { startProvision, getProjectDetail } from "./lifecycle";
 import { provisionRest, destroyRest } from "./postgrest";
 import { ensureMaster } from "./zero";
+import {
+  listOrganizations,
+  createOrganization,
+  systemStatus,
+  initSystem,
+} from "./orgs";
 import { config } from "./config";
 
 const app = new Hono();
@@ -84,7 +90,42 @@ app.get("/", (c) =>
 
 app.get("/health", (c) => c.json({ ok: true, service: "hauldr-control-plane" }));
 
-app.get("/v1/projects", async (c) => c.json(await listProjects()));
+// System / first-run. `/system` reports whether the install has been set up (a
+// default organization exists); `/system/init` performs the one-time setup —
+// create the master operator + the default organization (tenant zero).
+app.get("/v1/system", async (c) => c.json(await systemStatus()));
+
+app.post("/v1/system/init", async (c) => {
+  const body = await c.req.json().catch(() => ({}) as Record<string, string>);
+  try {
+    const res = await initSystem({
+      email: String(body.email ?? ""),
+      password: String(body.password ?? ""),
+      orgName: String(body.orgName ?? ""),
+    });
+    return c.json(res, 201);
+  } catch (e) {
+    const msg = (e as Error).message;
+    return c.json({ error: msg }, msg === "already initialized" ? 409 : 400);
+  }
+});
+
+// Organizations — the grouping above projects.
+app.get("/v1/organizations", async (c) => c.json(await listOrganizations()));
+
+app.post("/v1/organizations", async (c) => {
+  const body = await c.req.json().catch(() => ({}) as { name?: string });
+  if (!body?.name) return c.json({ error: "name required" }, 400);
+  try {
+    return c.json(await createOrganization(body.name), 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+app.get("/v1/projects", async (c) =>
+  c.json(await listProjects(c.req.query("org") || undefined)),
+);
 
 app.get("/v1/projects/:name", async (c) => {
   const detail = await getProjectDetail(c.req.param("name"));
@@ -98,10 +139,13 @@ app.get("/v1/projects/:name", async (c) => {
 app.post("/v1/projects", async (c) => {
   const body = await c.req
     .json()
-    .catch(() => ({}) as { name?: string; rest?: boolean });
+    .catch(() => ({}) as { name?: string; rest?: boolean; organizationId?: string });
   if (!body?.name) return c.json({ error: "name required" }, 400);
   try {
-    const res = await startProvision(body.name, { rest: !!body.rest });
+    const res = await startProvision(body.name, {
+      rest: !!body.rest,
+      organizationId: body.organizationId || undefined,
+    });
     return c.json(res, 202);
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
