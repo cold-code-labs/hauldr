@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { listProjects, destroyProject } from "./provision";
 import { startProvision, getProjectDetail } from "./lifecycle";
 import { provisionRest, destroyRest } from "./postgrest";
+import { provisionRealtime, destroyRealtime } from "./realtime";
 import { ensureMaster } from "./zero";
 import {
   listOrganizations,
@@ -175,6 +176,26 @@ app.delete("/v1/projects/:name/services/rest", async (c) => {
   try {
     await destroyRest(c.req.param("name"));
     return c.json({ name: c.req.param("name"), rest: "removed" });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// Realtime — the SHARED multi-tenant Realtime service. Opt-in per project:
+// registers the project as a tenant (broadcast / presence / postgres-changes).
+app.post("/v1/projects/:name/services/realtime", async (c) => {
+  try {
+    const res = await provisionRealtime(c.req.param("name"));
+    return c.json(res, 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+app.delete("/v1/projects/:name/services/realtime", async (c) => {
+  try {
+    await destroyRealtime(c.req.param("name"));
+    return c.json({ name: c.req.param("name"), realtime: "removed" });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }

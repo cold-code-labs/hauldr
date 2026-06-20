@@ -62,6 +62,22 @@ export async function bootstrap() {
     await ensureDatabase(config.poolerMetaDb);
     console.log(`supavisor metadata db ready: ${config.poolerMetaDb}`);
   }
+
+  // Realtime metadata db — the shared Realtime service migrates its own
+  // tenants/extensions tables into the `_realtime` schema on boot, but it
+  // connects with search_path=_realtime and so can create neither the database
+  // nor the schema. Create both here so Realtime comes up clean.
+  if (config.realtimeUrl) {
+    await ensureDatabase("_realtime");
+    const rt = dbClient("_realtime");
+    await rt.connect();
+    try {
+      await rt.query("create schema if not exists _realtime");
+    } finally {
+      await rt.end();
+    }
+    console.log("realtime metadata db ready: _realtime");
+  }
 }
 
 /** Create a database if it does not already exist. */

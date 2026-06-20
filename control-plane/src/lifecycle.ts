@@ -104,16 +104,20 @@ export async function getProjectDetail(name: string) {
   const { rows } = await controlPool.query(
     `select name, database, role, db_password, status, status_detail,
             gotrue_url, postgrest_url, rest_requested, created_at,
-            storage_bucket, storage_access_key_id, storage_secret_key
+            storage_bucket, storage_access_key_id, storage_secret_key,
+            realtime_url, realtime_external_id
        from projects where name = $1`,
     [name],
   );
   const r = rows[0];
   if (!r) return null;
 
-  const [authReady, restReady] = await Promise.all([
+  const [authReady, restReady, realtimeReady] = await Promise.all([
     r.gotrue_url ? probe(`${r.gotrue_url}/health`) : Promise.resolve(false),
     r.postgrest_url ? probe(`${r.postgrest_url}/`) : Promise.resolve(false),
+    r.realtime_external_id && config.realtimeUrl
+      ? probe(`${config.realtimeUrl}/api/tenants/${r.realtime_external_id}/health`)
+      : Promise.resolve(false),
   ]);
 
   return {
@@ -130,6 +134,9 @@ export async function getProjectDetail(name: string) {
         : r.rest_requested
           ? { url: null, ready: false }
           : null,
+      realtime: r.realtime_url
+        ? { url: r.realtime_url, externalId: r.realtime_external_id, ready: realtimeReady }
+        : null,
     },
     // Internal connection for an app on the shared network — DB never goes public.
     internal: r.db_password

@@ -1,0 +1,155 @@
+import crypto from "node:crypto";
+import { controlPool, dbClient } from "./db";
+import { config } from "./config";
+
+// Shared Realtime: register / deregister a project as a TENANT of the one shared
+// Realtime service (broadcast / presence / postgres-changes over WebSocket).
+//
+// Realtime is multi-tenant by design — a single service holds a `tenants` table
+// (each with its own JWT secret + db connection) and routes a connection to the
+// right tenant by the host's first label. So "provisioning" a project's realtime
+// is not a new container (as PostgREST is) but a row in that table, created via
+// the service's management API. The tenant's jwt_secret IS the project's GoTrue
+// secret, so the same token that signs into GoTrue authorizes a realtime channel.
+
+export type ProjectRealtime = {
+  /** Public per-project Realtime host the SDK connects to. */
+  realtimeUrl: string;
+  /** Tenant id Realtime resolves from the host's first label. */
+  externalId: string;
+};
+
+export function realtimeEnabled(): boolean {
+  return !!config.realtimeUrl;
+}
+
+/** The tenant id Realtime derives from the public host's first label. */
+function externalIdFor(name: string): string {
+  if (config.realtimeDomainPattern) {
+    return config.realtimeDomainPattern.replace(/\{project\}/g, name).split(".")[0];
+  }
+  return `realtime-${name}`;
+}
+
+/** The public host the SDK connects to (front of the shared service). */
+function publicUrlFor(name: string): string {
+  if (config.realtimeDomainPattern) {
+    const host = config.realtimeDomainPattern.replace(/\{project\}/g, name);
+    return `${config.endpointScheme}://${host}`;
+  }
+  return config.realtimeUrl;
+}
+
+/** A short-lived admin JWT for the Realtime management API (API_JWT_SECRET). */
+function adminToken(): string {
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(
+    JSON.stringify({ role: "supabase_admin", iat: now, exp: now + 300 }),
+  ).toString("base64url");
+  const data = `${header}.${payload}`;
+  const sig = crypto.createHmac("sha256", config.jwtSecret).update(data).digest("base64url");
+  return `${data}.${sig}`;
+}
+
+/**
+ * Provision a project's realtime: ensure the project DB can host Realtime's
+ * per-tenant schema, then upsert the tenant via the shared service's API. The
+ * service runs its per-tenant migrations into the project DB on first register.
+ * Idempotent — re-registering updates the tenant in place.
+ */
+export async function provisionRealtime(name: string): Promise<ProjectRealtime> {
+  if (!realtimeEnabled()) {
+    throw new Error("realtime is not configured (set HAULDR_REALTIME_URL)");
+  }
+
+  const { rows } = await controlPool.query(
+    "select database, jwt_secret from projects where name = $1",
+    [name],
+  );
+  const row = rows[0] as { database: string; jwt_secret: string | null } | undefined;
+  if (!row) throw new Error(`project '${name}' does not exist`);
+  if (!row.jwt_secret) {
+    throw new Error(`project '${name}' has no JWT secret — provision auth before realtime`);
+  }
+
+  // Realtime's per-tenant migrations connect with search_path=realtime and can't
+  // create the schema, so it must already exist (the base schema adds it; ensure
+  // it here too for projects provisioned before realtime support landed).
+  const target = dbClient(row.database);
+  await target.connect();
+  try {
+    await target.query("create schema if not exists realtime authorization postgres");
+  } finally {
+    await target.end();
+  }
+
+  const externalId = externalIdFor(name);
+  const admin = new URL(config.adminUrl);
+  const body = {
+    tenant: {
+      name: externalId,
+      external_id: externalId,
+      jwt_secret: row.jwt_secret,
+      max_concurrent_users: 200,
+      max_events_per_second: 100,
+      postgres_cdc_default: "postgres_cdc_rls",
+      extensions: [
+        {
+          type: "postgres_cdc_rls",
+          // Realtime encrypts these (string-typed) fields, so db_port must be a
+          // string. CDC connects as the admin/superuser to read the WAL + manage
+          // the replication slot (postgres-changes; needs wal_level=logical).
+          settings: {
+            db_host: config.authDbHost,
+            db_port: String(config.authDbPort),
+            db_name: row.database,
+            db_user: decodeURIComponent(admin.username),
+            db_password: decodeURIComponent(admin.password),
+            region: config.garageRegion || "local",
+            poll_interval_ms: 100,
+            poll_max_record_bytes: 1048576,
+            ssl_enforced: false,
+          },
+        },
+      ],
+    },
+  };
+
+  const res = await fetch(`${config.realtimeUrl}/api/tenants`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${adminToken()}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`realtime tenant register failed (${res.status}): ${txt.slice(0, 200)}`);
+  }
+
+  const realtimeUrl = publicUrlFor(name);
+  await controlPool.query(
+    "update projects set realtime_url = $2, realtime_external_id = $3 where name = $1",
+    [name, realtimeUrl, externalId],
+  );
+  return { realtimeUrl, externalId };
+}
+
+/** Deregister a project's Realtime tenant. Idempotent. */
+export async function destroyRealtime(name: string): Promise<void> {
+  if (realtimeEnabled()) {
+    const externalId = externalIdFor(name);
+    await fetch(`${config.realtimeUrl}/api/tenants/${externalId}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${adminToken()}` },
+    }).catch(() => {});
+  }
+  await controlPool
+    .query(
+      "update projects set realtime_url = null, realtime_external_id = null where name = $1",
+      [name],
+    )
+    .catch(() => {});
+}

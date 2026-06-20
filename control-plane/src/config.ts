@@ -108,6 +108,17 @@ export const config = {
   // distinct from the auth pattern so the two endpoints never collide.
   restDomainPattern: process.env.HAULDR_REST_DOMAIN_PATTERN ?? "",
 
+  // Realtime — the SHARED, multi-tenant Realtime service (broadcast / presence /
+  // postgres-changes over WebSocket). Unlike auth/REST it is NOT per-project: one
+  // service serves every project, each registered as a Realtime "tenant" via its
+  // management API. Opt-in per project (services/realtime). Empty url = disabled.
+  //   realtimeUrl     — in-network management/WS endpoint, e.g. http://realtime:4000
+  //   realtimeDomainPattern — public per-project host; `{project}` substituted
+  //     (e.g. "realtime-{project}.example.com"). Realtime derives the tenant from
+  //     the host's first label, so the tenant external_id IS that whole label.
+  realtimeUrl: process.env.HAULDR_REALTIME_URL ?? "",
+  realtimeDomainPattern: process.env.HAULDR_REALTIME_DOMAIN_PATTERN ?? "",
+
   // Per-project auth DNS. The Coolify provisioner routes a project's GoTrue at an
   // external host (HAULDR_AUTH_DOMAIN_PATTERN); that host resolves only once a DNS
   // record points it at the edge in front of this server.

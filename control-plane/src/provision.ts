@@ -12,6 +12,7 @@ import {
 } from "./supavisor";
 import { provisionAuth, destroyAuth, type ProjectAuth } from "./gotrue";
 import { destroyRest } from "./postgrest";
+import { destroyRealtime } from "./realtime";
 import {
   storageEnabled,
   provisionStorage,
@@ -194,8 +195,9 @@ export async function destroyProject(
     (reg.rows[0]?.tenant_external_id as string | undefined) ?? name;
 
   // 1. Stop the project's satellites first, so they stop reconnecting to the db.
-  //    REST is à-la-carte (may not exist) — destroyRest is idempotent.
+  //    REST + realtime are à-la-carte (may not exist) — both are idempotent.
   await destroyRest(name);
+  await destroyRealtime(name);
   if (config.authProvisioner !== "none") {
     await destroyAuth(name);
   }

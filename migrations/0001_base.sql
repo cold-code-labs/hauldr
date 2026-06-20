@@ -60,3 +60,11 @@ alter default privileges in schema public
   grant select, insert, update, delete on tables to authenticated;
 alter default privileges in schema public
   grant select on tables to anon;
+
+-- Realtime: the shared multi-tenant Realtime service runs its OWN per-tenant
+-- migrations inside this database (creating realtime.messages/subscription/…) the
+-- first time the project is registered as a tenant. Those migrations connect with
+-- search_path=realtime and cannot create the schema themselves, so it must already
+-- exist. Pre-create it here (owned by postgres) for every project; it stays empty
+-- and harmless until the project opts into realtime.
+create schema if not exists realtime authorization postgres;

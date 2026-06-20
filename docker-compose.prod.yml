@@ -62,6 +62,11 @@ services:
       # separate Coolify apps (same backend as auth), routed at their own domain.
       HAULDR_REST_DOMAIN_PATTERN: ${HAULDR_REST_DOMAIN_PATTERN}
       HAULDR_REST_IMAGE: ${HAULDR_REST_IMAGE:-postgrest/postgrest:v12.2.3}
+      # Shared Realtime — one service for all projects; the control plane registers
+      # each project as a tenant via its in-network mgmt API. Per-project public
+      # host follows the domain pattern (tenant = the host's first label).
+      HAULDR_REALTIME_URL: ${HAULDR_REALTIME_URL:-http://realtime:4000}
+      HAULDR_REALTIME_DOMAIN_PATTERN: ${HAULDR_REALTIME_DOMAIN_PATTERN}
       # Project zero — the panel's own auth (GoTrue). The control plane prepares
       # its db at bootstrap and creates the master operator once GoTrue is up.
       HAULDR_JWT_SECRET: ${HAULDR_JWT_SECRET}
@@ -220,6 +225,51 @@ services:
       coolify:
         aliases:
           - hauldr-garage
+    restart: unless-stopped
+
+  # Realtime (Supabase Realtime) — o serviço de realtime do data plane:
+  # broadcast / presence / postgres-changes sobre WebSocket. MULTI-TENANT por
+  # design: UM serviço serve todos os projetos (≠ GoTrue/PostgREST que são por
+  # projeto). O control plane registra cada projeto como "tenant" via a mgmt API
+  # interna (http://realtime:4000); o tenant é resolvido pelo 1º label do host
+  # público (`hauldr-realtime` alias na rede coolify roteia os domínios
+  # realtime-<proj>). Migra seu próprio schema `_realtime` no boot (db criado no
+  # bootstrap do control plane). ⚠️ postgres-changes exige wal_level=logical no
+  # hauldr-db; broadcast/presence funcionam sem isso.
+  realtime:
+    image: ${HAULDR_REALTIME_IMAGE:-supabase/realtime:v2.102.3}
+    depends_on:
+      hauldr-db:
+        condition: service_healthy
+      control-plane:
+        condition: service_healthy
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+    environment:
+      PORT: "4000"
+      DB_HOST: hauldr-db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_NAME: _realtime
+      DB_AFTER_CONNECT_QUERY: SET search_path TO _realtime
+      DB_ENC_KEY: ${HAULDR_REALTIME_ENC_KEY:-hauldrRealtime16}
+      API_JWT_SECRET: ${HAULDR_JWT_SECRET}
+      METRICS_JWT_SECRET: ${HAULDR_JWT_SECRET}
+      SECRET_KEY_BASE: ${HAULDR_REALTIME_SECRET_KEY_BASE}
+      APP_NAME: realtime
+      SEED_SELF_HOST: "false"
+      RUN_JANITOR: "true"
+      DISABLE_HEALTHCHECK_LOGGING: "true"
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+    networks:
+      default: {}
+      coolify:
+        aliases:
+          - hauldr-realtime
     restart: unless-stopped
 
 networks:
