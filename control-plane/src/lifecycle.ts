@@ -3,6 +3,7 @@ import { config } from "./config";
 import { provisionDatabase } from "./provision";
 import { provisionAuth } from "./gotrue";
 import { provisionRest } from "./postgrest";
+import { storageEnabled, provisionStorage } from "./storage";
 import { defaultOrgId } from "./orgs";
 
 const SLUG = /^[a-z][a-z0-9_]{1,40}$/;
@@ -59,6 +60,7 @@ async function provisionInBackground(name: string, opts: ProvisionOpts): Promise
     await provisionDatabase(name);
     const auth = config.authProvisioner === "none" ? null : await provisionAuth(name);
     const rest = opts.rest ? await provisionRest(name) : null;
+    if (storageEnabled()) await provisionStorage(name);
     // Wait for the sidecars to actually answer before declaring the project live.
     if (auth) await waitStable(`${auth.gotrueUrl}/health`);
     if (rest) await waitStable(`${rest.restUrl}/`);
@@ -101,7 +103,8 @@ async function waitStable(url: string, need = 2, tries = 150): Promise<void> {
 export async function getProjectDetail(name: string) {
   const { rows } = await controlPool.query(
     `select name, database, role, db_password, status, status_detail,
-            gotrue_url, postgrest_url, rest_requested, created_at
+            gotrue_url, postgrest_url, rest_requested, created_at,
+            storage_bucket, storage_access_key_id, storage_secret_key
        from projects where name = $1`,
     [name],
   );
@@ -136,6 +139,17 @@ export async function getProjectDetail(name: string) {
           database: r.database,
           role: r.role,
           dbUrl: internalDbUrl(r.database, r.role, r.db_password),
+        }
+      : null,
+    // S3 storage block an app feeds to createClient({ storage }) — one bucket/key
+    // per project. Endpoint is in-network (the store never needs a public route).
+    storage: r.storage_bucket
+      ? {
+          endpoint: config.garageS3Endpoint,
+          region: config.garageRegion,
+          bucket: r.storage_bucket,
+          accessKeyId: r.storage_access_key_id,
+          secretAccessKey: r.storage_secret_key,
         }
       : null,
   };

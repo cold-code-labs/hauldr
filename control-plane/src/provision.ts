@@ -12,6 +12,12 @@ import {
 } from "./supavisor";
 import { provisionAuth, destroyAuth, type ProjectAuth } from "./gotrue";
 import { destroyRest } from "./postgrest";
+import {
+  storageEnabled,
+  provisionStorage,
+  destroyStorage,
+  type ProjectStorage,
+} from "./storage";
 import { defaultOrgId } from "./orgs";
 
 const SLUG = /^[a-z][a-z0-9_]{1,40}$/;
@@ -25,7 +31,10 @@ export type Project = {
   pooled: boolean;
 };
 
-export type FullProject = Project & { auth: ProjectAuth | null };
+export type FullProject = Project & {
+  auth: ProjectAuth | null;
+  storage: ProjectStorage | null;
+};
 
 /**
  * The full createProject flow: a database + its auth. This is what the
@@ -37,7 +46,8 @@ export async function createProject(name: string): Promise<FullProject> {
   const dp = await provisionDatabase(name);
   const auth =
     config.authProvisioner === "none" ? null : await provisionAuth(name);
-  return { ...dp, auth };
+  const storage = storageEnabled() ? await provisionStorage(name) : null;
+  return { ...dp, auth, storage };
 }
 
 /**
@@ -189,6 +199,8 @@ export async function destroyProject(
   if (config.authProvisioner !== "none") {
     await destroyAuth(name);
   }
+  // The project's bucket + key on the object store (external; idempotent).
+  await destroyStorage(name);
 
   // 2. Release the pooler, so no upstream connection blocks the drop.
   if (poolerEnabled()) {

@@ -48,14 +48,15 @@ async function main() {
   const bobRows = await hauldr.db.asUser(bob.access_token).select("todos");
   assert(bobRows.length === 0, "bob sees 0 rows — RLS enforced through the SDK, no manual claims");
 
-  // The pre-alpha namespaces fail loudly rather than silently.
+  // Without storage config, `files` fails loudly (clear config error) rather
+  // than silently — it only works when createClient gets a `storage` block.
   let stubbed = false;
   try {
-    await hauldr.files.upload("avatars", {});
+    await hauldr.files.upload("avatars", { key: "x.txt", body: "x" });
   } catch {
     stubbed = true;
   }
-  assert(stubbed, "files namespace throws a clear not-implemented (pre-alpha)");
+  assert(stubbed, "files namespace throws a clear config error when storage is unset");
 
   await hauldr.db.end();
   await destroyProject("demo");

@@ -44,6 +44,15 @@ export const config = {
   // data port, which is what RLS-bound data uses).
   poolerSessionPort: Number(process.env.HAULDR_POOLER_SESSION_PORT ?? 5432),
 
+  // Object storage (Garage). Empty adminUrl/token/s3Endpoint = disabled (a
+  // deployment without object storage; `hauldr.files` stays unconfigured). The
+  // control plane reaches the admin API in-network; apps reach S3 via the S3
+  // endpoint handed to them in the project detail.
+  garageAdminUrl: process.env.HAULDR_GARAGE_ADMIN_URL ?? "",
+  garageAdminToken: process.env.GARAGE_ADMIN_TOKEN ?? "",
+  garageS3Endpoint: process.env.HAULDR_GARAGE_S3_ENDPOINT ?? "",
+  garageRegion: process.env.HAULDR_GARAGE_REGION ?? "garage",
+
   // Per-project auth provisioning. "docker" brings up a GoTrue container per
   // project (the reference / self-host path); "none" skips it (data plane only).
   authProvisioner: process.env.HAULDR_AUTH_PROVISIONER ?? "docker",
