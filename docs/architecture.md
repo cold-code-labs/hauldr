@@ -41,7 +41,7 @@ optional set of satellites on top.
  │                        │                  ▲ per-project, à-la-carte
  │ Hauldr API (mgmt)      │                  │  ┌ Auth (GoTrue)    [ALWAYS]
  └───────────┬────────────┘                  │  └ REST (PostgREST) [optional]
-             │ called by                      │     realtime = SSE in the app
+             │ called by                      │     realtime = shared Realtime (WS)
    your provisioning automation               │     storage  = shared S3 store
 ```
 
@@ -194,7 +194,7 @@ server directly:
 hauldr.auth   → GoTrue (lifecycle / OAuth / magic-link / MFA)
 hauldr.db     → typed queries through the pooler (injects the RLS claim)
 hauldr.files  → upload / signed URL over standard S3
-hauldr.live   → SSE over Postgres LISTEN/NOTIFY
+hauldr.live   → shared, multi-tenant Realtime over WebSocket (broadcast / presence / postgres-changes)
 ```
 
 See [sdk.md](sdk.md).

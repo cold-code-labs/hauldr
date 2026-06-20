@@ -30,7 +30,7 @@ Two keys exist per project:
 hauldr.auth   → GoTrue (lifecycle / OAuth / magic-link / MFA)
 hauldr.db     → typed queries through the pooler (injects the RLS claim)
 hauldr.files  → upload / signed URL over standard S3
-hauldr.live   → SSE over Postgres LISTEN/NOTIFY
+hauldr.live   → WebSocket (shared Realtime): broadcast · presence · changes
 ```
 
 ### `hauldr.auth`
@@ -81,7 +81,11 @@ checks are the same model as the rest of your data.
 
 ### `hauldr.live`
 
-Realtime over server-sent events, backed by Postgres `LISTEN`/`NOTIFY`:
+Realtime over a shared, multi-tenant Realtime service (WebSocket) — broadcast,
+presence, and postgres-changes. One service serves every project; each is a
+Realtime tenant whose JWT secret IS the project's GoTrue secret, so the token
+that signs in also authorizes a channel (postgres-changes additionally needs
+`wal_level=logical` on the cluster; broadcast/presence do not):
 
 ```ts
 const sub = hauldr.live.on("posts", (change) => {

@@ -90,7 +90,7 @@ secret — measured in tens of megabytes, not gigabytes.
  │ Hauldr API (mgmt)   │              ▲ per-project, à-la-carte
  └──────────┬──────────┘              │  ┌ Auth (GoTrue)   [always]
             │ called by               │  └ REST (PostgREST) [optional]
-   your provisioning automation       │     realtime = SSE · storage = S3
+   your provisioning automation       │     realtime = shared WS · storage = S3
 ```
 
 Full detail in [docs/architecture.md](docs/architecture.md).
@@ -114,7 +114,7 @@ const posts = await hauldr.db.query.posts.findMany({ where: { published: true } 
 // Files — S3-style upload + signed URLs
 const { url } = await hauldr.files.upload("avatars", file)
 
-// Realtime — server-sent events over LISTEN/NOTIFY
+// Realtime — WebSocket via a shared, multi-tenant Realtime service
 hauldr.live.on("posts", (change) => render(change))
 ```
 
@@ -123,7 +123,7 @@ hauldr.live.on("posts", (change) => render(change))
 | `hauldr.auth` | GoTrue (lifecycle / OAuth / magic-link / MFA)   |
 | `hauldr.db`   | Typed queries through the pooler (RLS-aware)     |
 | `hauldr.files`| Object storage over standard S3                  |
-| `hauldr.live` | SSE over Postgres `LISTEN`/`NOTIFY`              |
+| `hauldr.live` | Shared Realtime over WebSocket (broadcast · presence · changes) |
 
 See [docs/sdk.md](docs/sdk.md).
 
