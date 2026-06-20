@@ -25,21 +25,22 @@ export function storageEnabled(): boolean {
 
 const bucketAlias = (name: string) => `proj-${name}`;
 
+// Garage admin API (v1, REST-style — the version shipped by garage 1.x).
 async function garageApi(
-  fn: string,
-  opts: { body?: unknown; query?: string } = {},
+  method: string,
+  path: string,
+  body?: unknown,
 ): Promise<any> {
-  const url = `${config.garageAdminUrl}/v2/${fn}${opts.query ? `?${opts.query}` : ""}`;
-  const res = await fetch(url, {
-    method: "POST",
+  const res = await fetch(`${config.garageAdminUrl}${path}`, {
+    method,
     headers: {
       Authorization: `Bearer ${config.garageAdminToken}`,
-      "Content-Type": "application/json",
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    throw new Error(`garage ${fn} failed (${res.status}): ${await res.text()}`);
+    throw new Error(`garage ${method} ${path} failed (${res.status}): ${await res.text()}`);
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -72,22 +73,21 @@ export async function provisionStorage(name: string): Promise<ProjectStorage> {
   // Create the bucket; if the alias already exists, reuse its id.
   let bucketId: string;
   try {
-    bucketId = (await garageApi("CreateBucket", { body: { globalAlias: alias } })).id;
+    bucketId = (await garageApi("POST", "/v1/bucket", { globalAlias: alias })).id;
   } catch (e) {
-    const info = await garageApi("GetBucketInfo", {
-      query: `globalAlias=${encodeURIComponent(alias)}`,
-    }).catch(() => null);
+    const info = await garageApi(
+      "GET",
+      `/v1/bucket?globalAlias=${encodeURIComponent(alias)}`,
+    ).catch(() => null);
     if (!info?.id) throw e;
     bucketId = info.id;
   }
 
-  const key = await garageApi("CreateKey", { body: { name: `${name}-key` } });
-  await garageApi("AllowBucketKey", {
-    body: {
-      bucketId,
-      accessKeyId: key.accessKeyId,
-      permissions: { read: true, write: true, owner: false },
-    },
+  const key = await garageApi("POST", "/v1/key", { name: `${name}-key` });
+  await garageApi("POST", "/v1/bucket/allow", {
+    bucketId,
+    accessKeyId: key.accessKeyId,
+    permissions: { read: true, write: true, owner: false },
   });
 
   await controlPool.query(
@@ -106,18 +106,20 @@ export async function destroyStorage(name: string): Promise<void> {
   );
   const p = prev.rows[0];
   if (p?.storage_access_key_id) {
-    await garageApi("DeleteKey", {
-      query: `id=${encodeURIComponent(p.storage_access_key_id)}`,
-    }).catch(() => {});
+    await garageApi(
+      "DELETE",
+      `/v1/key?id=${encodeURIComponent(p.storage_access_key_id)}`,
+    ).catch(() => {});
   }
   if (p?.storage_bucket) {
-    const info = await garageApi("GetBucketInfo", {
-      query: `globalAlias=${encodeURIComponent(p.storage_bucket)}`,
-    }).catch(() => null);
+    const info = await garageApi(
+      "GET",
+      `/v1/bucket?globalAlias=${encodeURIComponent(p.storage_bucket)}`,
+    ).catch(() => null);
     if (info?.id) {
-      await garageApi("DeleteBucket", {
-        query: `id=${encodeURIComponent(info.id)}`,
-      }).catch(() => {});
+      await garageApi("DELETE", `/v1/bucket?id=${encodeURIComponent(info.id)}`).catch(
+        () => {},
+      );
     }
   }
 }
