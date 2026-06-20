@@ -15,6 +15,11 @@
 services:
   hauldr-db:
     image: postgres:16-alpine
+    # Shared core datastore — generous ceiling so a tenant spike can't OOM it,
+    # but still bounded so a runaway can't claim the whole host.
+    mem_limit: 2g
+    mem_reservation: 256m
+    cpus: 2.0
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -36,6 +41,9 @@ services:
     build:
       context: .
       dockerfile: control-plane/Dockerfile
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
     environment:
       HAULDR_DB_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@hauldr-db:5432/postgres
       HAULDR_API_PORT: "8787"
@@ -86,6 +94,9 @@ services:
   # (schema + search_path), so GoTrue migrates cleanly on first boot.
   auth:
     image: supabase/gotrue:v2.190.0
+    mem_limit: 384m
+    mem_reservation: 64m
+    cpus: 0.5
     environment:
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@hauldr-db:5432/hauldr_zero?sslmode=disable
@@ -115,6 +126,9 @@ services:
     build:
       context: ./panel
       dockerfile: Dockerfile
+    mem_limit: 768m
+    mem_reservation: 128m
+    cpus: 1.0
     environment:
       HAULDR_API_URL: http://control-plane:8787
       HAULDR_API_KEY: ${HAULDR_API_KEY}
@@ -125,6 +139,15 @@ services:
         condition: service_healthy
     expose:
       - "3000"
+    # Gate routing on readiness: Coolify/Traefik only attach this backend once
+    # Next.js is actually serving — so a redeploy never drops traffic into a
+    # still-booting container (the 504-during-deploy we hit).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       default: {}
       coolify: {}
