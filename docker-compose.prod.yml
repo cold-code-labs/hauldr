@@ -153,6 +153,48 @@ services:
       coolify: {}
     restart: unless-stopped
 
+  # Multi-tenant pooler (Supavisor). Cada projeto vira um tenant, registrado pelo
+  # control plane via API de gerência (porta 4000). Apps por-projeto conectam à
+  # porta de dados (6543, transaction-mode p/ RLS) pelo alias coolify
+  # `hauldr-pooler`. Sobe DEPOIS do control-plane (que cria o db `_supabase` no
+  # bootstrap). ⚠️ coldcodelabs segue direto no hauldr-db — não passa por aqui.
+  pooler:
+    image: supabase/supavisor:2.9.7
+    depends_on:
+      hauldr-db:
+        condition: service_healthy
+      control-plane:
+        condition: service_healthy
+    command: ["/bin/sh", "-c", "/app/bin/migrate && /app/bin/server"]
+    mem_limit: 768m
+    mem_reservation: 128m
+    cpus: 1.0
+    environment:
+      PORT: "4000"
+      POSTGRES_HOST: hauldr-db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: _supabase
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DATABASE_URL: ecto://postgres:${POSTGRES_PASSWORD:-postgres}@hauldr-db:5432/_supabase
+      SECRET_KEY_BASE: ${SUPAVISOR_SECRET_KEY_BASE}
+      VAULT_ENC_KEY: ${SUPAVISOR_VAULT_ENC_KEY}
+      API_JWT_SECRET: ${SUPAVISOR_API_JWT_SECRET}
+      METRICS_JWT_SECRET: ${SUPAVISOR_API_JWT_SECRET}
+      CLUSTER_POSTGRES: "true"
+      REGION: local
+      ERL_AFLAGS: -proto_dist inet_tcp
+      POOLER_TENANT_ID: hauldr
+      POOLER_DEFAULT_POOL_SIZE: "10"
+      POOLER_MAX_CLIENT_CONN: "100"
+      POOLER_POOL_MODE: transaction
+      DB_POOL_SIZE: "5"
+    networks:
+      default: {}
+      coolify:
+        aliases:
+          - hauldr-pooler
+    restart: unless-stopped
+
 networks:
   default: {}
   coolify:
