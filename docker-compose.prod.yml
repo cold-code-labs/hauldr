@@ -139,14 +139,6 @@ services:
         condition: service_healthy
     expose:
       - "3000"
-    # Traefik backend explícito. O Coolify gera o router (Host rule) a partir do
-    # docker_compose_domains, mas a geração do label de SERVIÇO + porta do
-    # loadbalancer é não-determinística no recreate (já caiu em 503 sem backend).
-    # Declarar aqui fixa o chain router→service→porta de forma durável.
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.http-0-rddi39yxzzgg7l9njbj8odna-panel.service=http-0-rddi39yxzzgg7l9njbj8odna-panel"
-      - "traefik.http.services.http-0-rddi39yxzzgg7l9njbj8odna-panel.loadbalancer.server.port=3000"
     # Gate routing on readiness: Coolify/Traefik only attach this backend once
     # Next.js is actually serving — so a redeploy never drops traffic into a
     # still-booting container (the 504-during-deploy we hit).
@@ -203,6 +195,33 @@ services:
           - hauldr-pooler
     restart: unless-stopped
 
+  # Object store S3-compatível (Garage, single-node) — o storage do data plane.
+  # Um store compartilhado, um bucket por projeto. O control plane cria bucket +
+  # chave S3 por projeto via API admin (porta 3903); apps falam S3 na porta 3900
+  # pelo alias coolify `hauldr-garage`. Imagem fininha (build) embute o
+  # garage.toml; secrets vêm das envs GARAGE_*. ⚠️ replication_factor=1 → backup
+  # off-site é responsabilidade do operador (ver docs/storage.md).
+  garage:
+    build:
+      context: ./garage
+      dockerfile: Dockerfile
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+      GARAGE_METRICS_TOKEN: ${GARAGE_METRICS_TOKEN}
+    volumes:
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    networks:
+      default: {}
+      coolify:
+        aliases:
+          - hauldr-garage
+    restart: unless-stopped
+
 networks:
   default: {}
   coolify:
@@ -210,3 +229,5 @@ networks:
 
 volumes:
   hauldr_pgdata:
+  garage_meta:
+  garage_data:

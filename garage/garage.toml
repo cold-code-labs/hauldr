@@ -1,0 +1,27 @@
+# Garage — object store S3-compatível do data plane do Hauldr (single-node).
+# Secrets (rpc_secret, admin_token, metrics_token) NÃO ficam aqui — vêm das envs
+# GARAGE_RPC_SECRET / GARAGE_ADMIN_TOKEN / GARAGE_METRICS_TOKEN (a imagem é um
+# binário estático sem shell; este arquivo é montado em /etc/garage.toml).
+#
+# ⚠️ replication_factor = 1 → sem redundância. Durabilidade é responsabilidade do
+# operador (backup off-site do bucket); ver docs/storage.md. OK p/ começar; subir
+# pra replicação quando houver 2º nó.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+# Apps falam S3 path-style contra http://hauldr-garage:3900; o root_domain só
+# importa para acesso vhost-style, que não usamos.
+root_domain = ".s3.hauldr.local"
+
+[admin]
+api_bind_addr = "[::]:3903"
