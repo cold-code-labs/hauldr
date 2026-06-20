@@ -137,9 +137,18 @@ export async function provisionRealtime(name: string): Promise<ProjectRealtime> 
 
   // Point the project's public Realtime host at the edge (a no-op unless a DNS
   // provisioner is configured). This is the per-project opt-in for the browser
-  // (WS) leg: a project that never enables realtime gets no tenant AND no host.
+  // (WS) leg. Best-effort: the tenant is already registered and usable in-network,
+  // so a DNS hiccup must not fail the whole opt-in — the host can be (re)pointed
+  // later by re-running this. The edge router for the host is provisioned
+  // separately (the shared service is fronted by one rule).
   const host = hostFor(name);
-  if (host) await ensureHostDns(host);
+  if (host) {
+    try {
+      await ensureHostDns(host);
+    } catch (e) {
+      console.warn(`realtime: DNS for ${host} not set (${(e as Error).message}) — point it manually`);
+    }
+  }
 
   const realtimeUrl = publicUrlFor(name);
   await controlPool.query(
