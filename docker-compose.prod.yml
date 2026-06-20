@@ -139,6 +139,14 @@ services:
         condition: service_healthy
     expose:
       - "3000"
+    # Traefik backend explícito. O Coolify gera o router (Host rule) a partir do
+    # docker_compose_domains, mas a geração do label de SERVIÇO + porta do
+    # loadbalancer é não-determinística no recreate (já caiu em 503 sem backend).
+    # Declarar aqui fixa o chain router→service→porta de forma durável.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.http-0-rddi39yxzzgg7l9njbj8odna-panel.service=http-0-rddi39yxzzgg7l9njbj8odna-panel"
+      - "traefik.http.services.http-0-rddi39yxzzgg7l9njbj8odna-panel.loadbalancer.server.port=3000"
     # Gate routing on readiness: Coolify/Traefik only attach this backend once
     # Next.js is actually serving — so a redeploy never drops traffic into a
     # still-booting container (the 504-during-deploy we hit).
