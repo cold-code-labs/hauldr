@@ -265,6 +265,18 @@ services:
       ERL_AFLAGS: -proto_dist inet_tcp
       DNS_NODES: "''"
       RLIMIT_NOFILE: "10000"
+    # Public routing for the browser (WS) leg. ONE rule serves every project: the
+    # tenant is resolved from the host's first label, so a HostRegexp catch-all
+    # (realtime-<proj>.<domain>) covers all of them. Only projects that opted in
+    # have a DNS record pointing here, so unmatched hosts never reach this. The
+    # rule is env-driven (HAULDR_REALTIME_TRAEFIK_RULE) to keep the compose
+    # domain-agnostic; the edge terminates TLS, so the origin entrypoint is http.
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.hauldr-realtime.entryPoints=http
+      - "traefik.http.routers.hauldr-realtime.rule=${HAULDR_REALTIME_TRAEFIK_RULE:-HostRegexp(`^realtime-.+`)}"
+      - traefik.http.routers.hauldr-realtime.service=hauldr-realtime
+      - traefik.http.services.hauldr-realtime.loadbalancer.server.port=4000
     networks:
       default: {}
       coolify:

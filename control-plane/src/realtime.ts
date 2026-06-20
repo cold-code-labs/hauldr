@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { controlPool, dbClient } from "./db";
 import { config } from "./config";
+import { ensureHostDns, destroyHostDns } from "./dns";
 
 // Shared Realtime: register / deregister a project as a TENANT of the one shared
 // Realtime service (broadcast / presence / postgres-changes over WebSocket).
@@ -23,12 +24,17 @@ export function realtimeEnabled(): boolean {
   return !!config.realtimeUrl;
 }
 
+/** The public host for a project, e.g. realtime-<proj>.example.com (no scheme). */
+function hostFor(name: string): string {
+  return config.realtimeDomainPattern
+    ? config.realtimeDomainPattern.replace(/\{project\}/g, name)
+    : "";
+}
+
 /** The tenant id Realtime derives from the public host's first label. */
 function externalIdFor(name: string): string {
-  if (config.realtimeDomainPattern) {
-    return config.realtimeDomainPattern.replace(/\{project\}/g, name).split(".")[0];
-  }
-  return `realtime-${name}`;
+  const host = hostFor(name);
+  return host ? host.split(".")[0] : `realtime-${name}`;
 }
 
 /** The public host the SDK connects to (front of the shared service). */
@@ -129,6 +135,12 @@ export async function provisionRealtime(name: string): Promise<ProjectRealtime> 
     throw new Error(`realtime tenant register failed (${res.status}): ${txt.slice(0, 200)}`);
   }
 
+  // Point the project's public Realtime host at the edge (a no-op unless a DNS
+  // provisioner is configured). This is the per-project opt-in for the browser
+  // (WS) leg: a project that never enables realtime gets no tenant AND no host.
+  const host = hostFor(name);
+  if (host) await ensureHostDns(host);
+
   const realtimeUrl = publicUrlFor(name);
   await controlPool.query(
     "update projects set realtime_url = $2, realtime_external_id = $3 where name = $1",
@@ -137,7 +149,7 @@ export async function provisionRealtime(name: string): Promise<ProjectRealtime> 
   return { realtimeUrl, externalId };
 }
 
-/** Deregister a project's Realtime tenant. Idempotent. */
+/** Deregister a project's Realtime tenant + drop its public host DNS. Idempotent. */
 export async function destroyRealtime(name: string): Promise<void> {
   if (realtimeEnabled()) {
     const externalId = externalIdFor(name);
@@ -146,6 +158,8 @@ export async function destroyRealtime(name: string): Promise<void> {
       headers: { authorization: `Bearer ${adminToken()}` },
     }).catch(() => {});
   }
+  const host = hostFor(name);
+  if (host) await destroyHostDns(host).catch(() => {});
   await controlPool
     .query(
       "update projects set realtime_url = null, realtime_external_id = null where name = $1",
