@@ -115,6 +115,22 @@ async function main() {
     watch.close();
   }
 
+  // ---- 4. Presence: two members see each other on the channel ---------------
+  {
+    const topic = `presence-${stamp}`;
+    let aliceSaw: string[] = [];
+    const second = createClient({ url: "https://unused.invalid", realtime: { url: URL, accessToken: aliceToken } });
+    const pa = app.live.presence(topic, (s) => (aliceSaw = Object.keys(s)), { key: "alice", initial: { name: "alice" } });
+    const pb = second.live.presence(topic, () => {}, { key: "bob", initial: { name: "bob" } });
+    await sleep(3000); // join + track + state sync
+    assert(
+      aliceSaw.includes("alice") && aliceSaw.includes("bob"),
+      `presence: alice sees both members on the channel (saw: ${aliceSaw.join(",")})`,
+    );
+    pa.unsubscribe();
+    pb.unsubscribe();
+  }
+
   await sleep(300);
   console.log(
     failures === 0 ? "\nALL REALTIME ASSERTIONS PASSED ✓" : `\n${failures} ASSERTION(S) FAILED ✗`,

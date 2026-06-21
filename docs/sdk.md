@@ -110,6 +110,20 @@ hauldr.live.on("room:42", render, { private: true })
 await hauldr.live.broadcast("room:42", "message", { text: "hi" }, { private: true })
 ```
 
+**Presence** — track who is on a channel right now. `onSync` fires with the full
+state (member key → the state each published) on every join, leave, or update:
+
+```ts
+const here = hauldr.live.presence(
+  "room:42",
+  (state) => render(Object.keys(state)), // who's online
+  { key: user.id, initial: { name: user.name } },
+)
+
+here.track({ name: user.name, typing: true }) // update own state
+here.unsubscribe()                              // leave
+```
+
 **postgres-changes** — stream row changes straight from the database, delivered
 RLS-filtered (only rows the user may SELECT reach the socket). Needs
 `wal_level=logical` + wal2json on the cluster and the table in the

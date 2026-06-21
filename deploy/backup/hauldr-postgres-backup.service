@@ -1,0 +1,8 @@
+[Unit]
+Description=Hauldr Postgres off-site backup (pg_dumpall → object store)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hauldr-postgres-backup.sh

@@ -4,6 +4,9 @@ import type {
   LiveClient,
   LiveMessage,
   PostgresChange,
+  PresenceChannel,
+  PresenceOptions,
+  PresenceState,
   RealtimeConfig,
   Subscription,
 } from "./types";
@@ -16,16 +19,49 @@ import type {
 //
 // Channels are public by default. Pass `{ private: true }` and Realtime runs the
 // project's RLS policies on `realtime.messages` (role + claims from the token)
-// before letting the socket subscribe or broadcast — so a private channel is
-// only reachable by users the policies allow.
+// before letting the socket subscribe or broadcast.
 //
 // No WS dependency: uses the runtime's global WebSocket (browsers, and Node ≥ 18
 // via undici). `broadcast` works anywhere fetch does (incl. server actions).
 
 const HEARTBEAT_MS = 30_000;
 
-/** One frame off the socket: Phoenix `{ event, payload }`. */
-type Frame = { event?: string; payload?: unknown };
+/** One frame off the socket: Phoenix `{ event, payload, ref }`. */
+type Frame = { event?: string; payload?: unknown; ref?: string };
+
+/** Server presence shape: member key → { metas: [ { phx_ref, ...state } ] }. */
+type MetaState = Record<string, Array<Record<string, unknown>>>;
+
+function flatten(meta: MetaState): PresenceState {
+  const out: PresenceState = {};
+  for (const [key, metas] of Object.entries(meta)) {
+    out[key] = metas.map((m) => {
+      const { phx_ref: _r, phx_ref_prev: _p, ...rest } = m;
+      return rest;
+    });
+  }
+  return out;
+}
+
+function applyState(meta: MetaState, state: Record<string, { metas?: Array<Record<string, unknown>> }>) {
+  for (const k of Object.keys(meta)) delete meta[k];
+  for (const [key, v] of Object.entries(state)) meta[key] = [...(v.metas ?? [])];
+}
+
+function applyDiff(
+  meta: MetaState,
+  diff: { joins?: Record<string, { metas?: Array<Record<string, unknown>> }>; leaves?: Record<string, { metas?: Array<Record<string, unknown>> }> },
+) {
+  for (const [key, v] of Object.entries(diff.leaves ?? {})) {
+    const gone = new Set((v.metas ?? []).map((m) => m.phx_ref));
+    meta[key] = (meta[key] ?? []).filter((m) => !gone.has(m.phx_ref));
+    if (!meta[key].length) delete meta[key];
+  }
+  for (const [key, v] of Object.entries(diff.joins ?? {})) {
+    const have = new Set((meta[key] ?? []).map((m) => m.phx_ref));
+    meta[key] = [...(meta[key] ?? []), ...(v.metas ?? []).filter((m) => !have.has(m.phx_ref))];
+  }
+}
 
 export class RealtimeClient implements LiveClient {
   private readonly httpUrl: string;
@@ -40,19 +76,19 @@ export class RealtimeClient implements LiveClient {
 
   /** Subscribe to broadcast events on a topic. `cb` fires once per event. */
   on(topic: string, cb: (message: LiveMessage) => void, opts: ChannelOptions = {}): Subscription {
-    return this.subscribe(topic, opts, {}, (frame) => {
-      if (frame.event === "broadcast" && frame.payload) {
-        const p = frame.payload as { event?: string; payload?: unknown };
+    const h = this.open(topic, opts, {}, (f) => {
+      if (f.event === "broadcast" && f.payload) {
+        const p = f.payload as { event?: string; payload?: unknown };
         cb({ event: p.event ?? "", payload: p.payload });
       }
     });
+    return { unsubscribe: h.stop };
   }
 
   /**
-   * Subscribe to Postgres row changes (postgres-changes / CDC). Each change is
-   * delivered RLS-filtered — only rows the token's user may SELECT reach the
-   * socket. Needs `postgres-changes` enabled on the tenant + the table in the
-   * `supabase_realtime` publication.
+   * Subscribe to Postgres row changes (postgres-changes / CDC), delivered
+   * RLS-filtered — only rows the token's user may SELECT reach the socket. Needs
+   * `postgres-changes` enabled + the table in the `supabase_realtime` publication.
    */
   onChanges(
     topic: string,
@@ -66,9 +102,9 @@ export class RealtimeClient implements LiveClient {
       ...(f.table ? { table: f.table } : {}),
       ...(f.filter ? { filter: f.filter } : {}),
     }));
-    return this.subscribe(topic, opts, { postgres_changes: list }, (frame) => {
-      if (frame.event === "postgres_changes" && frame.payload) {
-        const d = (frame.payload as { data?: Record<string, unknown> }).data;
+    const h = this.open(topic, opts, { postgres_changes: list }, (f) => {
+      if (f.event === "postgres_changes" && f.payload) {
+        const d = (f.payload as { data?: Record<string, unknown> }).data;
         if (!d) return;
         const rec = d.record as Record<string, unknown> | undefined;
         const old = d.old_record as Record<string, unknown> | undefined;
@@ -82,19 +118,50 @@ export class RealtimeClient implements LiveClient {
         });
       }
     });
+    return { unsubscribe: h.stop };
   }
 
   /**
-   * Open a channel and route every frame to `onFrame`. `configOverride` is merged
-   * into the join config (e.g. `{ postgres_changes: [...] }`); `private` adds the
-   * RLS authorization gate.
+   * Track presence on a channel — who is currently here. `onSync` fires with the
+   * full state whenever a member joins, leaves, or updates. Call `track` to (re)
+   * publish this client's own state.
    */
-  private subscribe(
+  presence(
+    topic: string,
+    onSync: (state: PresenceState) => void,
+    opts: PresenceOptions = {},
+  ): PresenceChannel {
+    const meta: MetaState = {};
+    const emit = () => onSync(flatten(meta));
+    const h = this.open(topic, opts, { presence: { key: opts.key ?? "" } }, (f) => {
+      if (f.event === "presence_state" && f.payload) {
+        applyState(meta, f.payload as Record<string, { metas?: Array<Record<string, unknown>> }>);
+        emit();
+      } else if (f.event === "presence_diff" && f.payload) {
+        applyDiff(meta, f.payload as Parameters<typeof applyDiff>[1]);
+        emit();
+      }
+    });
+    if (opts.initial) h.send("presence", { type: "presence", event: "track", payload: opts.initial });
+    return {
+      track: (state) => h.send("presence", { type: "presence", event: "track", payload: state }),
+      untrack: () => h.send("presence", { type: "presence", event: "untrack" }),
+      unsubscribe: h.stop,
+    };
+  }
+
+  /**
+   * Open a channel: join, route every frame to `onFrame`, and expose `send` for
+   * channel pushes (presence). `configOverride` is merged into the join config;
+   * `private` adds the RLS authorization gate. Pushes before the join is
+   * acknowledged are queued and flushed on join.
+   */
+  private open(
     topic: string,
     opts: ChannelOptions,
     configOverride: Record<string, unknown>,
     onFrame: (frame: Frame) => void,
-  ): Subscription {
+  ): { stop(): void; send(event: string, payload: unknown): void } {
     const WS = (globalThis as { WebSocket?: typeof WebSocket }).WebSocket;
     if (!WS) {
       throw new Error("hauldr.live needs a WebSocket (browser, or Node ≥ 18)");
@@ -108,17 +175,33 @@ export class RealtimeClient implements LiveClient {
     const apikey = encodeURIComponent(this.accessToken ?? "");
     const ws = new WS(`${this.wsUrl}/socket/websocket?vsn=1.0.0&apikey=${apikey}`);
     const realtimeTopic = `realtime:${topic}`;
-    let ref = 0;
+    const joinRef = "1";
+    let ref = 1;
     const nextRef = () => String(++ref);
     let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let joined = false;
+    const pending: string[] = [];
+
+    const rawSend = (s: string) => {
+      try {
+        ws.send(s);
+      } catch {
+        // socket closing
+      }
+    };
+    const send = (event: string, payload: unknown) => {
+      const s = JSON.stringify({ topic: realtimeTopic, event, ref: nextRef(), payload });
+      if (joined) rawSend(s);
+      else pending.push(s);
+    };
 
     ws.onopen = () => {
-      ws.send(
+      rawSend(
         JSON.stringify({
           topic: realtimeTopic,
           event: "phx_join",
-          ref: nextRef(),
-          join_ref: "1",
+          ref: joinRef,
+          join_ref: joinRef,
           payload: {
             config: {
               broadcast: { self: true },
@@ -132,11 +215,7 @@ export class RealtimeClient implements LiveClient {
         }),
       );
       heartbeat = setInterval(() => {
-        try {
-          ws.send(JSON.stringify({ topic: "phoenix", event: "heartbeat", ref: nextRef(), payload: {} }));
-        } catch {
-          // socket closing — the next tick is cleared by unsubscribe/onclose
-        }
+        rawSend(JSON.stringify({ topic: "phoenix", event: "heartbeat", ref: nextRef(), payload: {} }));
       }, HEARTBEAT_MS);
     };
 
@@ -146,6 +225,13 @@ export class RealtimeClient implements LiveClient {
         m = JSON.parse(typeof ev.data === "string" ? ev.data : String(ev.data));
       } catch {
         return;
+      }
+      if (!joined && m.event === "phx_reply" && m.ref === joinRef) {
+        const status = (m.payload as { status?: string } | undefined)?.status;
+        if (status === "ok") {
+          joined = true;
+          for (const s of pending.splice(0)) rawSend(s);
+        }
       }
       onFrame(m);
     };
@@ -162,7 +248,7 @@ export class RealtimeClient implements LiveClient {
       if (heartbeat) clearInterval(heartbeat);
     };
 
-    return { unsubscribe: stop };
+    return { stop, send };
   }
 
   /** Publish an event to a topic. Server-side after a write, or client-to-client. */

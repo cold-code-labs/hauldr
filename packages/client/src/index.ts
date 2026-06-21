@@ -31,6 +31,7 @@ const filesStub: FilesClient = {
 const liveStub: LiveClient = {
   on: (): { unsubscribe(): void } => liveUnconfigured("on"),
   onChanges: (): { unsubscribe(): void } => liveUnconfigured("onChanges"),
+  presence: () => liveUnconfigured("presence"),
   broadcast: (_topic: string, _event: string, _payload: LiveMessage["payload"]): Promise<void> =>
     liveUnconfigured("broadcast"),
 };

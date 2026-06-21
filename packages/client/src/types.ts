@@ -114,10 +114,31 @@ export type PostgresChange = {
   commitTimestamp?: string;
 };
 
+/** Who is on a channel: a map of member key → the state each member published. */
+export type PresenceState = Record<string, Array<Record<string, unknown>>>;
+
+/** Options for a presence subscription. */
+export type PresenceOptions = ChannelOptions & {
+  /** Member key (e.g. a user id) — entries are grouped by it. Default: server-assigned. */
+  key?: string;
+  /** State to publish on join, so the caller need not call `track` separately. */
+  initial?: Record<string, unknown>;
+};
+
+/** A live presence subscription. `track` (re)publishes this client's state. */
+export type PresenceChannel = {
+  /** Publish or replace this client's presence state. */
+  track(state: Record<string, unknown>): void;
+  /** Stop advertising this client's presence (it leaves the state). */
+  untrack(): void;
+  unsubscribe(): void;
+};
+
 /**
  * Realtime over the shared, multi-tenant Realtime service (WebSocket).
  *   on(topic, cb, opts)         — subscribe to broadcast events on a topic.
  *   onChanges(topic, f, cb)     — subscribe to Postgres row changes (CDC), RLS-filtered.
+ *   presence(topic, onSync)     — track who is on a channel (joins / leaves / state).
  *   broadcast(topic, e, pl)     — publish an event (e.g. from a server action right
  *                                 after a write — the app-driven model).
  * Pass `{ private: true }` to gate a channel by RLS on `realtime.messages`.
@@ -130,5 +151,6 @@ export interface LiveClient {
     cb: (change: PostgresChange) => void,
     opts?: ChannelOptions,
   ): Subscription;
+  presence(topic: string, onSync: (state: PresenceState) => void, opts?: PresenceOptions): PresenceChannel;
   broadcast(topic: string, event: string, payload: unknown, opts?: ChannelOptions): Promise<void>;
 }
