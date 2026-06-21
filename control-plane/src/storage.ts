@@ -1,5 +1,5 @@
 import { controlPool } from "./db";
-import { config } from "./config";
+import { config, projectHostLabel } from "./config";
 
 /**
  * Storage — per-project object storage on the shared S3 store (Garage). Each
@@ -23,7 +23,9 @@ export function storageEnabled(): boolean {
   );
 }
 
-const bucketAlias = (name: string) => `proj-${name}`;
+// S3/Garage bucket names share DNS-label constraints (lowercase, [a-z0-9-], no
+// underscore), so derive the alias from the host-safe label, not the raw name.
+const bucketAlias = (name: string) => `proj-${projectHostLabel(name)}`;
 
 // Garage admin API (v1, REST-style — the version shipped by garage 1.x).
 async function garageApi(
