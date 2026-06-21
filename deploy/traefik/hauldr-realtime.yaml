@@ -1,0 +1,41 @@
+# Traefik file-provider route for the shared Realtime service.
+#
+# Realtime is multi-tenant: ONE service serves every project, and the tenant is
+# resolved from the request host's first label. So a single HostRegexp rule routes
+# every project's host (realtime-<project>.<domain>) to the one container — no
+# per-service compose labels, no per-project router.
+#
+# Why a file-provider route (not docker-compose Traefik labels): on a Coolify
+# deploy, Coolify owns Traefik and generates routers only from its own domain
+# config (exact Host per service) — it does not honour a per-service HostRegexp on
+# a shared container. Dropping this file in the proxy's dynamic directory routes
+# the wildcard independently. On a plain docker + Traefik deploy you can instead
+# put the equivalent labels on the realtime service.
+#
+# Install (Coolify): copy to the proxy's dynamic config dir on the host running
+# the realtime service, e.g. /data/coolify/proxy/dynamic/hauldr-realtime.yaml
+# (Traefik watches it live). Adjust the host regexp + service URL to your domain.
+#
+# The edge (a Cloudflare tunnel here) terminates TLS, so the origin entrypoint is
+# plain http — matching Coolify's per-app routers. WebSocket upgrades pass through
+# Traefik transparently.
+#
+# Per-project opt-in stays elsewhere: a project is reachable only once it (a) is
+# registered as a Realtime tenant and (b) has a DNS record for its host pointing
+# at this edge — both done by the control plane's services/realtime endpoint.
+
+http:
+  routers:
+    hauldr-realtime:
+      entryPoints: [http]
+      middlewares: [hauldr-realtime-gzip]
+      service: hauldr-realtime
+      rule: HostRegexp(`^realtime-[a-z0-9-]+\.coldcodelabs\.com$`)
+  middlewares:
+    hauldr-realtime-gzip:
+      compress: true
+  services:
+    hauldr-realtime:
+      loadBalancer:
+        servers:
+          - url: http://hauldr-realtime:4000

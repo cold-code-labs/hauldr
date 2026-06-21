@@ -63,8 +63,8 @@ services:
       HAULDR_REST_DOMAIN_PATTERN: ${HAULDR_REST_DOMAIN_PATTERN}
       HAULDR_REST_IMAGE: ${HAULDR_REST_IMAGE:-postgrest/postgrest:v12.2.3}
       # Shared Realtime — one service for all projects; the control plane registers
-      # each project as a tenant via its in-network mgmt API. Per-project public
-      # host follows the domain pattern (tenant = the host's first label).
+      # each project as a tenant via its in-network mgmt API, and points its public
+      # host (the domain pattern; tenant = the host's first label) at the edge.
       HAULDR_REALTIME_URL: ${HAULDR_REALTIME_URL:-http://realtime:4000}
       HAULDR_REALTIME_DOMAIN_PATTERN: ${HAULDR_REALTIME_DOMAIN_PATTERN}
       # Project zero — the panel's own auth (GoTrue). The control plane prepares
@@ -265,18 +265,12 @@ services:
       ERL_AFLAGS: -proto_dist inet_tcp
       DNS_NODES: "''"
       RLIMIT_NOFILE: "10000"
-    # Public routing for the browser (WS) leg. ONE rule serves every project: the
-    # tenant is resolved from the host's first label, so a HostRegexp catch-all
-    # (realtime-<proj>.<domain>) covers all of them. Only projects that opted in
-    # have a DNS record pointing here, so unmatched hosts never reach this. The
-    # rule is env-driven (HAULDR_REALTIME_TRAEFIK_RULE) to keep the compose
-    # domain-agnostic; the edge terminates TLS, so the origin entrypoint is http.
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.hauldr-realtime.entryPoints=http
-      - "traefik.http.routers.hauldr-realtime.rule=${HAULDR_REALTIME_TRAEFIK_RULE:-HostRegexp(`^realtime-.+`)}"
-      - traefik.http.routers.hauldr-realtime.service=hauldr-realtime
-      - traefik.http.services.hauldr-realtime.loadbalancer.server.port=4000
+    # Public routing for the browser (WS) leg is done at the reverse proxy, NOT
+    # via per-service compose labels: the tenant is resolved from the host's first
+    # label, so ONE wildcard rule (realtime-<proj>.<domain>) serves every project.
+    # Our Coolify/Traefik deploy uses a file-provider route — see
+    # deploy/traefik/hauldr-realtime.yaml. Only projects that opted in have a DNS
+    # record pointing here, so unmatched hosts never reach the service.
     networks:
       default: {}
       coolify:
