@@ -34,6 +34,13 @@ export type RealtimeConfig = {
   /** The signed-in user's access token — authorizes the channel + applies RLS.
    *  Server-side publishes may use the project anon/service token instead. */
   accessToken?: string;
+  /**
+   * Optional: fetch a fresh access token before the current one expires. Called
+   * ~1 minute before expiry (decoded from the JWT), and the new token is pushed to
+   * every open channel — so a long-lived private channel keeps its authorization
+   * past the access token's lifetime (e.g. a dashboard left open for hours).
+   */
+  getToken?: () => string | null | undefined | Promise<string | null | undefined>;
 };
 
 /** S3 connection for a project's object storage (its own bucket + scoped key). */
@@ -153,4 +160,7 @@ export interface LiveClient {
   ): Subscription;
   presence(topic: string, onSync: (state: PresenceState) => void, opts?: PresenceOptions): PresenceChannel;
   broadcast(topic: string, event: string, payload: unknown, opts?: ChannelOptions): Promise<void>;
+  /** Push a fresh access token to every open channel (re-authorizes private ones).
+   *  Usually automatic via `getToken`; call this to refresh on your own trigger. */
+  setAuth(token: string): void;
 }

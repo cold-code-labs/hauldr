@@ -124,6 +124,15 @@ here.track({ name: user.name, typing: true }) // update own state
 here.unsubscribe()                              // leave
 ```
 
+Private channels stay authorized past the access token's lifetime: pass a
+`getToken` in the realtime config and the client pulls a fresh token ~1 min before
+expiry and pushes it to every open channel (or call `live.setAuth(token)` on your
+own trigger) — so a dashboard left open for hours keeps receiving.
+
+```ts
+createClient({ realtime: { url, accessToken, getToken: () => fetchFreshToken() } })
+```
+
 **postgres-changes** — stream row changes straight from the database, delivered
 RLS-filtered (only rows the user may SELECT reach the socket). Needs
 `wal_level=logical` + wal2json on the cluster and the table in the

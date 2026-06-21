@@ -63,15 +63,63 @@ function applyDiff(
   }
 }
 
+/** Read the `exp` (seconds) out of a JWT without verifying it — to schedule a
+ *  refresh before expiry. Browser (atob) and Node (Buffer) both covered. */
+function decodeExp(token?: string): number | undefined {
+  const part = token?.split(".")[1];
+  if (!part) return undefined;
+  try {
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+    const json = JSON.parse(
+      typeof atob === "function" ? atob(b64 + pad) : Buffer.from(b64 + pad, "base64").toString("utf8"),
+    );
+    return typeof json.exp === "number" ? json.exp : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export class RealtimeClient implements LiveClient {
   private readonly httpUrl: string;
   private readonly wsUrl: string;
-  private readonly accessToken?: string;
+  private currentToken?: string;
+  private readonly getToken?: RealtimeConfig["getToken"];
+  /** `send` of every joined channel — the refresh loop pushes a new token to each. */
+  private readonly channels = new Set<(event: string, payload: unknown) => void>();
+  private refreshTimer?: ReturnType<typeof setTimeout>;
 
   constructor(cfg: RealtimeConfig) {
     this.httpUrl = cfg.url.replace(/\/+$/, "");
     this.wsUrl = this.httpUrl.replace(/^http/, "ws");
-    this.accessToken = cfg.accessToken;
+    this.currentToken = cfg.accessToken;
+    this.getToken = cfg.getToken;
+  }
+
+  /** Push a fresh token to every open channel (re-authorizes private ones). */
+  setAuth(token: string): void {
+    this.currentToken = token;
+    for (const send of this.channels) send("access_token", { access_token: token });
+    this.scheduleRefresh();
+  }
+
+  /** Schedule the next token refresh ~1 min before the current token expires
+   *  (or a fixed delay on failure). No-op without `getToken` or open channels. */
+  private scheduleRefresh(delayMs?: number): void {
+    if (!this.getToken || this.channels.size === 0) return;
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    const exp = decodeExp(this.currentToken);
+    const ms = delayMs ?? (exp ? Math.max(5_000, exp * 1000 - Date.now() - 60_000) : 50 * 60_000);
+    this.refreshTimer = setTimeout(async () => {
+      this.refreshTimer = undefined;
+      try {
+        const t = await this.getToken!();
+        if (t) this.setAuth(t);
+        else this.scheduleRefresh(30_000);
+      } catch {
+        this.scheduleRefresh(30_000);
+      }
+    }, ms);
   }
 
   /** Subscribe to broadcast events on a topic. `cb` fires once per event. */
@@ -166,13 +214,13 @@ export class RealtimeClient implements LiveClient {
     if (!WS) {
       throw new Error("hauldr.live needs a WebSocket (browser, or Node ≥ 18)");
     }
-    if (opts.private && !this.accessToken) {
+    if (opts.private && !this.currentToken) {
       throw new Error(
         "hauldr.live: a private channel needs an access token — createClient({ realtime: { url, accessToken } })",
       );
     }
 
-    const apikey = encodeURIComponent(this.accessToken ?? "");
+    const apikey = encodeURIComponent(this.currentToken ?? "");
     const ws = new WS(`${this.wsUrl}/socket/websocket?vsn=1.0.0&apikey=${apikey}`);
     const realtimeTopic = `realtime:${topic}`;
     const joinRef = "1";
@@ -210,7 +258,7 @@ export class RealtimeClient implements LiveClient {
               private: !!opts.private,
               ...configOverride,
             },
-            ...(this.accessToken ? { access_token: this.accessToken } : {}),
+            ...(this.currentToken ? { access_token: this.currentToken } : {}),
           },
         }),
       );
@@ -231,6 +279,8 @@ export class RealtimeClient implements LiveClient {
         if (status === "ok") {
           joined = true;
           for (const s of pending.splice(0)) rawSend(s);
+          this.channels.add(send);
+          if (this.getToken && !this.refreshTimer) this.scheduleRefresh();
         }
       }
       onFrame(m);
@@ -238,6 +288,11 @@ export class RealtimeClient implements LiveClient {
 
     const stop = () => {
       if (heartbeat) clearInterval(heartbeat);
+      this.channels.delete(send);
+      if (this.channels.size === 0 && this.refreshTimer) {
+        clearTimeout(this.refreshTimer);
+        this.refreshTimer = undefined;
+      }
       try {
         ws.close();
       } catch {
@@ -258,7 +313,7 @@ export class RealtimeClient implements LiveClient {
     payload: unknown,
     opts: ChannelOptions = {},
   ): Promise<void> {
-    if (opts.private && !this.accessToken) {
+    if (opts.private && !this.currentToken) {
       throw new Error(
         "hauldr.live: a private broadcast needs an access token — createClient({ realtime: { url, accessToken } })",
       );
@@ -267,8 +322,8 @@ export class RealtimeClient implements LiveClient {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(this.accessToken
-          ? { apikey: this.accessToken, Authorization: `Bearer ${this.accessToken}` }
+        ...(this.currentToken
+          ? { apikey: this.currentToken, Authorization: `Bearer ${this.currentToken}` }
           : {}),
       },
       body: JSON.stringify({ messages: [{ topic, event, payload, private: !!opts.private }] }),

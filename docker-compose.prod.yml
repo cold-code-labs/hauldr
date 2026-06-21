@@ -32,6 +32,11 @@ services:
       - max_replication_slots=10
       - -c
       - max_wal_senders=10
+      # Cap WAL a single slot may pin: an orphaned/stuck logical slot (e.g. a dead
+      # Realtime CDC subscription) is invalidated past this instead of growing WAL
+      # until the disk fills. Realtime recreates its slot on reconnect.
+      - -c
+      - max_slot_wal_keep_size=4GB
     # Shared core datastore — generous ceiling so a tenant spike can't OOM it,
     # but still bounded so a runaway can't claim the whole host.
     mem_limit: 2g

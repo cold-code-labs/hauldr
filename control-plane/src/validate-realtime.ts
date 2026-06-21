@@ -32,10 +32,10 @@ function assert(cond: boolean, msg: string) {
 }
 
 const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
-/** Mint a JWT the project's GoTrue would issue (HS256, given role + subject). */
-function mint(role: "authenticated" | "anon", sub: string): string {
+/** Mint a JWT the project's GoTrue would issue (HS256, role + subject, ttl secs). */
+function mint(role: "authenticated" | "anon", sub: string, ttl = 3600): string {
   const now = Math.floor(Date.now() / 1000);
-  const data = `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ role, sub, exp: now + 3600, iat: now })}`;
+  const data = `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ role, sub, exp: now + ttl, iat: now })}`;
   const sig = crypto.createHmac("sha256", SECRET).update(data).digest("base64url");
   return `${data}.${sig}`;
 }
@@ -129,6 +129,33 @@ async function main() {
     );
     pa.unsubscribe();
     pb.unsubscribe();
+  }
+
+  // ---- 5. Token refresh keeps a long-lived private channel authorized -------
+  {
+    const topic = `refresh-${stamp}`;
+    let refreshes = 0;
+    // Subscriber boots with a token that expires in 25s; getToken hands back a
+    // fresh one, which the client pushes to the channel before expiry.
+    const refreshing = createClient({
+      url: "https://unused.invalid",
+      realtime: {
+        url: URL,
+        accessToken: mint("authenticated", aliceId, 25),
+        getToken: () => {
+          refreshes++;
+          return mint("authenticated", aliceId, 3600);
+        },
+      },
+    });
+    let got = false;
+    const sub = refreshing.live.on(topic, (m) => { if (m.event === "rfx") got = true; }, { private: true });
+    await sleep(32000); // past the 25s expiry — the refresh fired ~5s in
+    await app.live.broadcast(topic, "rfx", { x: 1 }, { private: true });
+    await sleep(2500);
+    assert(refreshes >= 1, `token refresh: getToken was called to renew the token (${refreshes}x)`);
+    assert(got, "token refresh: private channel still delivers after the original token expired");
+    sub.unsubscribe();
   }
 
   await sleep(300);
