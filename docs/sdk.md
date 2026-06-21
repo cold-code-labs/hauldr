@@ -30,7 +30,7 @@ Two keys exist per project:
 hauldr.auth   → GoTrue (lifecycle / OAuth / magic-link / MFA)
 hauldr.db     → typed queries through the pooler (injects the RLS claim)
 hauldr.files  → upload / signed URL over standard S3
-hauldr.live   → WebSocket (shared Realtime): broadcast · presence · changes
+hauldr.live   → WebSocket (shared Realtime): broadcast · private channels · changes
 ```
 
 ### `hauldr.auth`
@@ -81,17 +81,49 @@ checks are the same model as the rest of your data.
 
 ### `hauldr.live`
 
-Realtime over a shared, multi-tenant Realtime service (WebSocket) — broadcast,
-presence, and postgres-changes. One service serves every project; each is a
-Realtime tenant whose JWT secret IS the project's GoTrue secret, so the token
-that signs in also authorizes a channel (postgres-changes additionally needs
-`wal_level=logical` on the cluster; broadcast/presence do not):
+Realtime over a shared, multi-tenant Realtime service (WebSocket) — broadcast and
+postgres-changes. One service serves every project; each is a Realtime tenant
+whose JWT secret IS the project's GoTrue secret, so the token that signs a user in
+also authorizes the channel.
+
+**Broadcast** — fan a named event out to every subscriber on a topic (the
+app-driven model: a server action publishes right after a write):
 
 ```ts
-const sub = hauldr.live.on("posts", (change) => {
-  // change.type: "insert" | "update" | "delete"
-  render(change)
+const sub = hauldr.live.on("room:42", (msg) => {
+  // msg.event, msg.payload
+  render(msg)
 })
+
+await hauldr.live.broadcast("room:42", "message", { text: "hi" })
+sub.unsubscribe()
+```
+
+**Private channels** — pass `{ private: true }` and Realtime authorizes the socket
+against the project's RLS policies on `realtime.messages` (role + claims from the
+token), so only users the policies allow can subscribe or broadcast. The default
+policy admits any authenticated user; scope it per topic in SQL. Requires an
+`accessToken` in the realtime config:
+
+```ts
+hauldr.live.on("room:42", render, { private: true })
+await hauldr.live.broadcast("room:42", "message", { text: "hi" }, { private: true })
+```
+
+**postgres-changes** — stream row changes straight from the database, delivered
+RLS-filtered (only rows the user may SELECT reach the socket). Needs
+`wal_level=logical` + wal2json on the cluster and the table in the
+`supabase_realtime` publication:
+
+```ts
+const sub = hauldr.live.onChanges(
+  "posts-feed",
+  { schema: "public", table: "posts", event: "*" },
+  (change) => {
+    // change.type: "INSERT" | "UPDATE" | "DELETE"; change.record / change.old
+    render(change)
+  },
+)
 
 sub.unsubscribe()
 ```

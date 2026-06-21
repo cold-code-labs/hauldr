@@ -46,6 +46,38 @@ function publicUrlFor(name: string): string {
   return config.realtimeUrl;
 }
 
+// RLS for private channels. Realtime's per-tenant migrations create
+// `realtime.messages` with RLS enabled and NO policies — so every private channel
+// is denied until policies exist. This opens private channels to any authenticated
+// user (a valid project JWT), which is strictly stronger than a public channel
+// (open to anyone who reaches the service). Apps tighten this per topic by
+// replacing these policies, e.g. `using (realtime.topic() = 'room:' || ...)`.
+// Idempotent (drop-then-create); applied after the tenant is registered, because
+// the table only exists once the per-tenant migrations have run.
+const REALTIME_RLS_SQL = `
+  grant usage on schema realtime to authenticated;
+  grant select, insert on realtime.messages to authenticated;
+
+  drop policy if exists hauldr_authenticated_read on realtime.messages;
+  create policy hauldr_authenticated_read on realtime.messages
+    for select to authenticated using (true);
+
+  drop policy if exists hauldr_authenticated_write on realtime.messages;
+  create policy hauldr_authenticated_write on realtime.messages
+    for insert to authenticated with check (true);
+`;
+
+/** Grant authenticated users access to private channels (RLS on realtime.messages). */
+async function applyRealtimeRls(database: string): Promise<void> {
+  const target = dbClient(database);
+  await target.connect();
+  try {
+    await target.query(REALTIME_RLS_SQL);
+  } finally {
+    await target.end();
+  }
+}
+
 /** A short-lived admin JWT for the Realtime management API (API_JWT_SECRET). */
 function adminToken(): string {
   const now = Math.floor(Date.now() / 1000);
@@ -134,6 +166,11 @@ export async function provisionRealtime(name: string): Promise<ProjectRealtime> 
     const txt = await res.text();
     throw new Error(`realtime tenant register failed (${res.status}): ${txt.slice(0, 200)}`);
   }
+
+  // Registering the tenant ran Realtime's per-tenant migrations, so
+  // `realtime.messages` now exists — add the RLS policies that make private
+  // channels usable by authenticated users.
+  await applyRealtimeRls(row.database);
 
   // Point the project's public Realtime host at the edge (a no-op unless a DNS
   // provisioner is configured). This is the per-project opt-in for the browser

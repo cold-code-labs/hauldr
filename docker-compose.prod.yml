@@ -14,7 +14,24 @@
 # Multi-tenant pooling (Supavisor) is layered in once this is green.
 services:
   hauldr-db:
-    image: postgres:16-alpine
+    # Postgres + wal2json (see deploy/postgres/Dockerfile). wal2json is the
+    # logical-decoding plugin Realtime's postgres-changes (postgres_cdc_rls) needs;
+    # the image is byte-identical postgres:16.14-alpine plus that one plugin, so it
+    # drops onto the existing data volume with no migration.
+    build:
+      context: ./deploy/postgres
+    # Realtime needs logical decoding: postgres-changes (wal2json) and the
+    # realtime.messages stream (pgoutput) both replicate from the WAL. Declared on
+    # the command line so a fresh data dir comes up ready (an existing dir already
+    # carries wal_level=logical in postgresql.auto.conf; re-asserting is a no-op).
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
     # Shared core datastore — generous ceiling so a tenant spike can't OOM it,
     # but still bounded so a runaway can't claim the whole host.
     mem_limit: 2g

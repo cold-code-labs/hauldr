@@ -13,6 +13,8 @@
     "validate:auth": "tsx src/validate-auth.ts",
     "validate:rest": "tsx src/validate-rest.ts",
     "validate:sdk": "tsx src/validate-sdk.ts",
+    "validate:realtime": "tsx src/validate-realtime.ts",
+    "validate:realtime:cdc": "tsx src/validate-realtime-cdc.ts",
     "validate:coolify": "tsx src/validate-coolify.ts"
   },
   "dependencies": {

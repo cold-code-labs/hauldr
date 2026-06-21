@@ -71,14 +71,64 @@ export interface FilesClient {
 /** One Realtime broadcast message: a named event with a JSON payload. */
 export type LiveMessage = { event: string; payload: unknown };
 
+/** Handle to an open subscription. Call `unsubscribe()` to close the socket. */
+export type Subscription = { unsubscribe(): void };
+
+/** Options shared by channel subscribes and broadcasts. */
+export type ChannelOptions = {
+  /**
+   * Private channel. Realtime authorizes the socket against RLS policies on the
+   * project's `realtime.messages` table using the access token (role + claims),
+   * so only users the policies allow can subscribe or broadcast. Requires an
+   * `accessToken` in the realtime config. Public channels (the default) are open
+   * to anyone who can reach the service.
+   */
+  private?: boolean;
+};
+
+/** A Postgres change kind, or "*" for all. */
+export type PostgresChangeEvent = "INSERT" | "UPDATE" | "DELETE" | "*";
+
+/** What to listen for with `onChanges` (postgres-changes / CDC). */
+export type ChangeFilter = {
+  /** Change kind — default "*". */
+  event?: PostgresChangeEvent;
+  /** Schema — default "public". */
+  schema?: string;
+  /** Table — omit to listen to every table in the schema. */
+  table?: string;
+  /** Row filter, PostgREST-style, e.g. "owner=eq.<uuid>". */
+  filter?: string;
+};
+
+/** A delivered Postgres change. RLS-filtered: only rows the user may SELECT. */
+export type PostgresChange = {
+  type: "INSERT" | "UPDATE" | "DELETE";
+  schema: string;
+  table: string;
+  /** The new row (INSERT / UPDATE). */
+  record?: Record<string, unknown>;
+  /** The previous row (UPDATE / DELETE — present per the table's REPLICA IDENTITY). */
+  old?: Record<string, unknown>;
+  /** Commit timestamp (ISO 8601). */
+  commitTimestamp?: string;
+};
+
 /**
  * Realtime over the shared, multi-tenant Realtime service (WebSocket).
- *   on(topic, cb)            — subscribe to a topic; cb fires per broadcast event.
- *   broadcast(topic, e, pl)  — publish an event to a topic (e.g. from a server
- *                              action right after a write — the app-driven model).
- * Presence and postgres-changes ride the same socket and land in a later pass.
+ *   on(topic, cb, opts)         — subscribe to broadcast events on a topic.
+ *   onChanges(topic, f, cb)     — subscribe to Postgres row changes (CDC), RLS-filtered.
+ *   broadcast(topic, e, pl)     — publish an event (e.g. from a server action right
+ *                                 after a write — the app-driven model).
+ * Pass `{ private: true }` to gate a channel by RLS on `realtime.messages`.
  */
 export interface LiveClient {
-  on(topic: string, cb: (message: LiveMessage) => void): { unsubscribe(): void };
-  broadcast(topic: string, event: string, payload: unknown): Promise<void>;
+  on(topic: string, cb: (message: LiveMessage) => void, opts?: ChannelOptions): Subscription;
+  onChanges(
+    topic: string,
+    filters: ChangeFilter | ChangeFilter[],
+    cb: (change: PostgresChange) => void,
+    opts?: ChannelOptions,
+  ): Subscription;
+  broadcast(topic: string, event: string, payload: unknown, opts?: ChannelOptions): Promise<void>;
 }
