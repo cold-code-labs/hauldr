@@ -101,6 +101,17 @@ export async function destroyApp(appUuid: string): Promise<void> {
   await coolify(`/applications/${appUuid}`, { method: "DELETE" });
 }
 
+/** Block until an app name is no longer listable. Coolify's DELETE is async, so
+ *  a fast delete→re-create would otherwise find the still-deleting app (stale
+ *  uuid) and the following setEnv 404s ("Application not found"). Symmetric to
+ *  the post-create poll in createDockerImageApp. */
+export async function waitAppGone(name: string, tries = 20): Promise<void> {
+  for (let i = 0; i < tries; i++) {
+    if (!(await findAppByName(name))) return;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+
 export type CoolifyEndpoint = { gotrueUrl: string; handle: string };
 
 /** Provision a per-project GoTrue as a Coolify docker-image app. */
@@ -151,8 +162,12 @@ export async function coolifyProvisionGotrue(
 }
 
 export async function coolifyDestroyGotrue(name: string): Promise<void> {
-  const appUuid = await findAppByName(`hauldr-auth-${name}`);
-  if (appUuid) await destroyApp(appUuid);
+  const appName = `hauldr-auth-${name}`;
+  const appUuid = await findAppByName(appName);
+  if (appUuid) {
+    await destroyApp(appUuid);
+    await waitAppGone(appName);
+  }
   if (config.authDomainPattern) {
     await destroyHostDns(hostFromPattern(config.authDomainPattern, name));
   }
@@ -210,8 +225,12 @@ export async function coolifyProvisionRest(
 }
 
 export async function coolifyDestroyRest(name: string): Promise<void> {
-  const appUuid = await findAppByName(`hauldr-rest-${name}`);
-  if (appUuid) await destroyApp(appUuid);
+  const appName = `hauldr-rest-${name}`;
+  const appUuid = await findAppByName(appName);
+  if (appUuid) {
+    await destroyApp(appUuid);
+    await waitAppGone(appName);
+  }
   if (config.restDomainPattern) {
     await destroyHostDns(hostFromPattern(config.restDomainPattern, name));
   }
