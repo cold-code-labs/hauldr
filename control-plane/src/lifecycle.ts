@@ -102,7 +102,7 @@ async function waitStable(url: string, need = 2, tries = 150): Promise<void> {
  */
 export async function getProjectDetail(name: string) {
   const { rows } = await controlPool.query(
-    `select name, database, role, db_password, status, status_detail,
+    `select name, database, role, db_password, jwt_secret, status, status_detail,
             gotrue_url, postgrest_url, rest_requested, created_at,
             storage_bucket, storage_access_key_id, storage_secret_key,
             realtime_url, realtime_external_id
@@ -139,6 +139,8 @@ export async function getProjectDetail(name: string) {
         : null,
     },
     // Internal connection for an app on the shared network — DB never goes public.
+    // jwtSecret is the project's GoTrue signing secret — a provisioner needs it
+    // to verify the app's auth tokens. Sits with the rest of the wiring material.
     internal: r.db_password
       ? {
           dbHost: config.authDbHost,
@@ -146,6 +148,7 @@ export async function getProjectDetail(name: string) {
           database: r.database,
           role: r.role,
           dbUrl: internalDbUrl(r.database, r.role, r.db_password),
+          jwtSecret: r.jwt_secret ?? null,
         }
       : null,
     // S3 storage block an app feeds to createClient({ storage }) — one bucket/key
