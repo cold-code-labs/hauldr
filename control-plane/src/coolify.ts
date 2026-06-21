@@ -67,6 +67,14 @@ export async function createDockerImageApp(opts: {
       instant_deploy: false,
     },
   });
+  // Coolify is eventually-consistent: the create response can return before the
+  // app is queryable, so an immediate setEnv/deploy 404s ("Application not
+  // found"). Poll until the app is listable, then return that uuid.
+  for (let i = 0; i < 12; i++) {
+    const found = await findAppByName(opts.name);
+    if (found) return found;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
   return created.uuid;
 }
 
