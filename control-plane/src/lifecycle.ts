@@ -62,8 +62,10 @@ async function provisionInBackground(name: string, opts: ProvisionOpts): Promise
     const rest = opts.rest ? await provisionRest(name) : null;
     if (storageEnabled()) await provisionStorage(name);
     // Wait for the sidecars to actually answer before declaring the project live.
-    if (auth) await waitStable(`${auth.gotrueUrl}/health`);
-    if (rest) await waitStable(`${rest.restUrl}/`);
+    // A sidecar can flap to exited:unhealthy on its FIRST deploy (it may start
+    // before the DB grants settle); waitStableHealing re-provisions once if so.
+    if (auth) await waitStableHealing(`${auth.gotrueUrl}/health`, () => provisionAuth(name));
+    if (rest) await waitStableHealing(`${rest.restUrl}/`, () => provisionRest(name));
     await controlPool.query(
       "update projects set status = 'live', status_detail = null where name = $1",
       [name],
@@ -95,6 +97,25 @@ async function waitStable(url: string, need = 2, tries = 150): Promise<void> {
   throw new Error(`endpoint ${url} never became stable`);
 }
 
+/** waitStable, but self-healing: a freshly-provisioned Coolify sidecar
+ *  occasionally comes up `exited:unhealthy` on its FIRST deploy (it can start
+ *  before the project's DB grants/roles settle). If the first window fails,
+ *  re-provision once (idempotent → re-deploys the same app) and wait again
+ *  before giving up — this automates the manual redeploy that used to be needed. */
+async function waitStableHealing(
+  url: string,
+  reprovision: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await waitStable(url, 2, 60); // ~2.5 min first window
+    return;
+  } catch {
+    console.warn(`sidecar ${url} not stable on first deploy — re-provisioning once`);
+  }
+  await reprovision();
+  await waitStable(url, 2, 96); // ~4 min after the redeploy
+}
+
 /**
  * Full project detail: persisted state + a live health probe of each sidecar +
  * the internal connection block (for same-server apps). This is what the panel
@@ -120,12 +141,33 @@ export async function getProjectDetail(name: string) {
       : Promise.resolve(false),
   ]);
 
+  // Self-heal a stale status: provisioning can persist 'error' (e.g. a sidecar
+  // flapped on its first deploy) even though every expected sidecar now answers.
+  // The live probes are the source of truth — if all expected ones are ready,
+  // reconcile the persisted status to 'live'. One-directional (never flips a
+  // live project to error on a transient probe miss).
+  let status = r.status;
+  let statusDetail = r.status_detail;
+  const restExpected = !!r.rest_requested;
+  const realtimeExpected = !!r.realtime_url;
+  const allReady =
+    authReady &&
+    (!restExpected || restReady) &&
+    (!realtimeExpected || realtimeReady);
+  if (status !== "live" && allReady) {
+    await controlPool
+      .query("update projects set status = 'live', status_detail = null where name = $1", [r.name])
+      .catch(() => {});
+    status = "live";
+    statusDetail = null;
+  }
+
   return {
     name: r.name,
     database: r.database,
     role: r.role,
-    status: r.status,
-    statusDetail: r.status_detail,
+    status,
+    statusDetail,
     createdAt: r.created_at,
     services: {
       auth: r.gotrue_url ? { url: r.gotrue_url, ready: authReady } : null,
