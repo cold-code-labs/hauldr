@@ -144,3 +144,21 @@ export function urlForDb(database: string): string {
   u.pathname = "/" + database;
   return u.toString();
 }
+
+/**
+ * A project name may contain underscores (valid for Postgres DB/role names, and
+ * for Docker container names), but DNS host labels may not (RFC 1123 → only
+ * [a-z0-9-]). Sanitize the name to a valid host label for any FQDN derived from
+ * it; container and database names keep the underscore.
+ */
+export function projectHostLabel(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/** Substitute {project} in a domain pattern with the host-safe label. */
+export function hostFromPattern(pattern: string, name: string): string {
+  return pattern.replace(/\{project\}/g, projectHostLabel(name));
+}

@@ -1,4 +1,4 @@
-import { config } from "./config";
+import { config, hostFromPattern } from "./config";
 import { ensureHostDns, destroyHostDns } from "./dns";
 
 /**
@@ -104,7 +104,7 @@ export async function coolifyProvisionGotrue(
   if (!config.authDomainPattern) {
     throw new Error("HAULDR_AUTH_DOMAIN_PATTERN is not set (e.g. 'auth-{project}.example.com')");
   }
-  const host = config.authDomainPattern.replace("{project}", name);
+  const host = hostFromPattern(config.authDomainPattern, name);
   const gotrueUrl = `${config.endpointScheme}://${host}`;
   const appName = `hauldr-auth-${name}`;
 
@@ -146,7 +146,7 @@ export async function coolifyDestroyGotrue(name: string): Promise<void> {
   const appUuid = await findAppByName(`hauldr-auth-${name}`);
   if (appUuid) await destroyApp(appUuid);
   if (config.authDomainPattern) {
-    await destroyHostDns(config.authDomainPattern.replace("{project}", name));
+    await destroyHostDns(hostFromPattern(config.authDomainPattern, name));
   }
 }
 
@@ -168,7 +168,7 @@ export async function coolifyProvisionRest(
   if (!config.restDomainPattern) {
     throw new Error("HAULDR_REST_DOMAIN_PATTERN is not set (e.g. 'rest-{project}.example.com')");
   }
-  const host = config.restDomainPattern.replace("{project}", name);
+  const host = hostFromPattern(config.restDomainPattern, name);
   const restUrl = `${config.endpointScheme}://${host}`;
   const appName = `hauldr-rest-${name}`;
 
@@ -205,6 +205,6 @@ export async function coolifyDestroyRest(name: string): Promise<void> {
   const appUuid = await findAppByName(`hauldr-rest-${name}`);
   if (appUuid) await destroyApp(appUuid);
   if (config.restDomainPattern) {
-    await destroyHostDns(config.restDomainPattern.replace("{project}", name));
+    await destroyHostDns(hostFromPattern(config.restDomainPattern, name));
   }
 }

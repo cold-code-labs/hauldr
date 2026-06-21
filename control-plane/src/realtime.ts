@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { controlPool, dbClient } from "./db";
-import { config } from "./config";
+import { config, hostFromPattern } from "./config";
 import { ensureHostDns, destroyHostDns } from "./dns";
 
 // Shared Realtime: register / deregister a project as a TENANT of the one shared
@@ -27,7 +27,7 @@ export function realtimeEnabled(): boolean {
 /** The public host for a project, e.g. realtime-<proj>.example.com (no scheme). */
 function hostFor(name: string): string {
   return config.realtimeDomainPattern
-    ? config.realtimeDomainPattern.replace(/\{project\}/g, name)
+    ? hostFromPattern(config.realtimeDomainPattern, name)
     : "";
 }
 
@@ -40,7 +40,7 @@ function externalIdFor(name: string): string {
 /** The public host the SDK connects to (front of the shared service). */
 function publicUrlFor(name: string): string {
   if (config.realtimeDomainPattern) {
-    const host = config.realtimeDomainPattern.replace(/\{project\}/g, name);
+    const host = hostFromPattern(config.realtimeDomainPattern, name);
     return `${config.endpointScheme}://${host}`;
   }
   return config.realtimeUrl;
