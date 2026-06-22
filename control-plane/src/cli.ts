@@ -1,5 +1,6 @@
 import { createProject, listProjects, destroyProject } from "./provision";
 import { provisionRest, destroyRest } from "./postgrest";
+import { provisionStorageApi, destroyStorageApi } from "./storageapi";
 import { ensureProjectZero, ensureMaster } from "./zero";
 import { config } from "./config";
 
@@ -35,6 +36,19 @@ async function main() {
       console.log(`rest removed for ${arg}`);
       break;
     }
+    case "storage": {
+      // Turn on the à-la-carte Storage (supabase/storage-api) layer for a project.
+      if (!arg) throw new Error("usage: cli storage <name>");
+      const res = await provisionStorageApi(arg);
+      console.log(JSON.stringify(res, null, 2));
+      break;
+    }
+    case "unstorage": {
+      if (!arg) throw new Error("usage: cli unstorage <name>");
+      await destroyStorageApi(arg);
+      console.log(`storage removed for ${arg}`);
+      break;
+    }
     case "zero": {
       // Prepare project zero's database (idempotent).
       await ensureProjectZero();
@@ -51,7 +65,7 @@ async function main() {
     }
     default:
       console.log(
-        "usage: cli <create <name> | destroy <name> | rest <name> | unrest <name> | list | zero | master [email]>",
+        "usage: cli <create <name> | destroy <name> | rest <name> | unrest <name> | storage <name> | unstorage <name> | list | zero | master [email]>",
       );
   }
   process.exit(0);

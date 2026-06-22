@@ -4,6 +4,7 @@ import { listProjects, destroyProject } from "./provision";
 import { startProvision, getProjectDetail } from "./lifecycle";
 import { provisionRest, destroyRest } from "./postgrest";
 import { provisionRealtime, destroyRealtime } from "./realtime";
+import { provisionStorageApi, destroyStorageApi } from "./storageapi";
 import { ensureMaster } from "./zero";
 import { migrateProject } from "./migrate";
 import { signMigrateToken, verifyMigrateToken } from "./migrate-auth";
@@ -208,6 +209,27 @@ app.delete("/v1/projects/:name/services/realtime", async (c) => {
   try {
     await destroyRealtime(c.req.param("name"));
     return c.json({ name: c.req.param("name"), realtime: "removed" });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// Storage — a per-project supabase/storage-api over the project's Garage bucket.
+// Opt-in: serves the Supabase `/storage/v1` surface (bucket/object REST) with
+// metadata + RLS in the project DB.
+app.post("/v1/projects/:name/services/storage", async (c) => {
+  try {
+    const res = await provisionStorageApi(c.req.param("name"));
+    return c.json(res, 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+app.delete("/v1/projects/:name/services/storage", async (c) => {
+  try {
+    await destroyStorageApi(c.req.param("name"));
+    return c.json({ name: c.req.param("name"), storage: "removed" });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }

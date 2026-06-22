@@ -147,19 +147,20 @@ export async function getProjectDetail(name: string) {
     `select name, database, role, db_password, jwt_secret, status, status_detail,
             gotrue_url, postgrest_url, rest_requested, created_at,
             storage_bucket, storage_access_key_id, storage_secret_key,
-            realtime_url, realtime_external_id
+            storage_api_url, realtime_url, realtime_external_id
        from projects where name = $1`,
     [name],
   );
   const r = rows[0];
   if (!r) return null;
 
-  const [authReady, restReady, realtimeReady] = await Promise.all([
+  const [authReady, restReady, realtimeReady, storageReady] = await Promise.all([
     r.gotrue_url ? probe(`${r.gotrue_url}/health`) : Promise.resolve(false),
     r.postgrest_url ? probe(`${r.postgrest_url}/`) : Promise.resolve(false),
     r.realtime_external_id && config.realtimeUrl
       ? probe(`${config.realtimeUrl}/api/tenants/${r.realtime_external_id}/health`)
       : Promise.resolve(false),
+    r.storage_api_url ? probe(`${r.storage_api_url}/status`) : Promise.resolve(false),
   ]);
 
   // Self-heal a stale status: provisioning can persist 'error' (e.g. a sidecar
@@ -199,6 +200,9 @@ export async function getProjectDetail(name: string) {
           : null,
       realtime: r.realtime_url
         ? { url: r.realtime_url, externalId: r.realtime_external_id, ready: realtimeReady }
+        : null,
+      storage: r.storage_api_url
+        ? { url: r.storage_api_url, ready: storageReady }
         : null,
     },
     // Internal connection for an app on the shared network — DB never goes public.

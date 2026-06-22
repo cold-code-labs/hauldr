@@ -274,3 +274,50 @@ export async function coolifyDestroyRest(
   const ep = endpointFor(base, environment, "rest");
   if (!ep.wildcardDns) await destroyHostDns(ep.host);
 }
+
+export type CoolifyStorageEndpoint = { storageUrl: string; handle: string };
+
+/**
+ * Provision a per-project supabase/storage-api as a Coolify docker-image app.
+ * The env (db, JWT secret, minted keys, Garage S3 bucket + key) is assembled by
+ * the caller (storageapi.ts); this only routes it at `/storage` (+ the
+ * `/storage/v1` Supabase alias) and brings the container up. STORAGE_PUBLIC_URL
+ * is set to the public base so storage-api advertises the right links.
+ */
+export async function coolifyProvisionStorageApi(
+  name: string,
+  env: Record<string, string>,
+  base: string,
+  environment: string,
+): Promise<CoolifyStorageEndpoint> {
+  const { domain: storageUrl, domains } = await ensureEndpoint(base, environment, "storage");
+  const appName = `hauldr-storage-${name}`;
+
+  const appUuid = await createDockerImageApp({
+    name: appName,
+    image: config.storageApiImage,
+    portsExposes: "5000",
+    domains: domains.join(","),
+  });
+
+  const full = { ...env, STORAGE_PUBLIC_URL: storageUrl };
+  for (const [k, v] of Object.entries(full)) await setEnv(appUuid, k, v);
+  await deployApp(appUuid);
+
+  return { storageUrl, handle: appUuid };
+}
+
+export async function coolifyDestroyStorageApi(
+  name: string,
+  base: string,
+  environment: string,
+): Promise<void> {
+  const appName = `hauldr-storage-${name}`;
+  const appUuid = await findAppByName(appName);
+  if (appUuid) {
+    await destroyApp(appUuid);
+    await waitAppGone(appName);
+  }
+  const ep = endpointFor(base, environment, "storage");
+  if (!ep.wildcardDns) await destroyHostDns(ep.host);
+}

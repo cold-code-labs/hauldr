@@ -13,6 +13,7 @@ import {
 import { provisionAuth, destroyAuth, type ProjectAuth } from "./gotrue";
 import { destroyRest } from "./postgrest";
 import { destroyRealtime } from "./realtime";
+import { destroyStorageApi } from "./storageapi";
 import {
   storageEnabled,
   provisionStorage,
@@ -197,6 +198,7 @@ export async function destroyProject(
   // 1. Stop the project's satellites first, so they stop reconnecting to the db.
   //    REST + realtime are à-la-carte (may not exist) — both are idempotent.
   await destroyRest(name);
+  await destroyStorageApi(name);
   await destroyRealtime(name);
   if (config.authProvisioner !== "none") {
     await destroyAuth(name);

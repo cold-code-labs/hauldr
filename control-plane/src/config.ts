@@ -113,6 +113,18 @@ export const config = {
   // distinct from the auth pattern so the two endpoints never collide.
   restDomainPattern: process.env.HAULDR_REST_DOMAIN_PATTERN ?? "",
 
+  // Per-project Storage (supabase/storage-api) — the à-la-carte object-storage
+  // API. Opt-in per project, like REST: an instance turns it on when it wants
+  // the Supabase `/storage/v1` surface (bucket/object REST) over its Garage
+  // bucket, with metadata + RLS in its own database. The bytes layer (bucket +
+  // scoped S3 key) is provisioned by storage.ts; this is the API server on top.
+  storageApiImage: process.env.HAULDR_STORAGE_API_IMAGE ?? "supabase/storage-api:v1.60.4",
+  // Max upload size in bytes (storage-api FILE_SIZE_LIMIT). Default 50 MiB.
+  storageFileSizeLimit: Number(process.env.HAULDR_STORAGE_FILE_SIZE_LIMIT ?? 52428800),
+  // Legacy host-per-service storage domain; `{project}` substituted. Empty in
+  // namespace mode (storage is path-routed at `/storage` under the project host).
+  storageDomainPattern: process.env.HAULDR_STORAGE_DOMAIN_PATTERN ?? "",
+
   // Namespace mode (preferred). One host per logical project — `{project}`
   // substituted with the base identity's host label, e.g.
   // "{project}.hauldr.example.com". Services are path-routed under it (`/auth`,
@@ -178,7 +190,7 @@ export function hostFromPattern(pattern: string, name: string): string {
   return pattern.replace(/\{project\}/g, projectHostLabel(name));
 }
 
-export type ServiceKind = "auth" | "rest" | "realtime";
+export type ServiceKind = "auth" | "rest" | "realtime" | "storage";
 
 /**
  * The host label for an identity in an environment: `<base>` for prod,
@@ -222,7 +234,9 @@ export function endpointFor(
       ? config.authDomainPattern
       : service === "rest"
         ? config.restDomainPattern
-        : config.realtimeDomainPattern;
+        : service === "storage"
+          ? config.storageDomainPattern
+          : config.realtimeDomainPattern;
   if (!legacy) {
     throw new Error(
       `no ${service} endpoint configured (set HAULDR_NAMESPACE_PATTERN or the legacy *_DOMAIN_PATTERN)`,
