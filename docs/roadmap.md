@@ -6,18 +6,21 @@ design questions.
 
 ## Phases
 
-| Phase  | Deliverable |
-| ------ | ----------- |
-| **P0** | Postgres + multi-tenant pooler running; multi-tenant pooling proven with two databases. |
-| **P1** | Minimal management API: `createProject` (CREATE DATABASE + role + pooler route + migrations + bring up the project's auth + JWT secret), connection string, working auth. External provisioning can call it. |
-| **P2** | Panel v1: projects, SQL editor, table editor, auth & users, connection string / keys. |
-| **P3** | RLS policy editor + à-la-carte REST layer (per-project toggle for projects that want a raw REST API). |
-| **P4** | Backups / point-in-time recovery, multi-cluster tiering, logs, per-project metrics, and open-source polish (docs, deployment recipe). |
+| Phase  | Deliverable | Status |
+| ------ | ----------- | ------ |
+| **P0** | Postgres + multi-tenant pooler running; multi-tenant pooling proven with two databases. | ✅ shipped |
+| **P1** | Minimal management API: `createProject` (CREATE DATABASE + role + pooler route + migrations + bring up the project's auth + JWT secret), connection string, working auth. External provisioning can call it. | ✅ shipped |
+| **P2** | Panel v1: projects, SQL editor, table editor, auth & users, connection string / keys. | ✅ shipped |
+| **P3** | RLS policy editor + à-la-carte REST layer (per-project toggle for projects that want a raw REST API). | ✅ shipped |
+| **P4** | Backups / point-in-time recovery, multi-cluster tiering, logs, per-project metrics, and open-source polish (docs, deployment recipe). | 🚧 in progress |
 
-**P0 + P1** are the milestone that matters first: they take new applications off
-the ceiling of a single-file embedded database, **already with proper auth and
-row-level security**. The optional REST layer (P3) is the only remaining
-per-project satellite after that.
+**P0–P3 are shipped.** The control plane provisions projects end-to-end (auth
+always; REST, storage, and realtime à-la-carte), exposes a Supabase-dialect
+data-plane gateway (`<base>.hauldr/{auth,rest}`, environment by host), a
+self-service schema-migrate endpoint, and storage via `storage-api`. The whole
+CCL fleet runs on it. What remains (**P4**) is operational polish: backups /
+PITR, multi-cluster tiering, per-project metrics and logs in the panel, and the
+`hauldr migrate` one-click import path.
 
 ## Settled decisions
 
@@ -51,5 +54,7 @@ These are genuinely undecided and tracked as issues:
 
 ## Next concrete step
 
-Specify the contract of the management API (`createProject`) and the bootstrap
-recipe for the stack (Postgres + pooler + object store + project zero).
+`hauldr migrate` — a one-click import path that lifts an existing project
+(schema + auth users + storage) into a Hauldr project, validated live against a
+real migration. This is the remaining moat piece on top of the shipped P0–P3
+foundation.

@@ -143,9 +143,11 @@ See [docs/sdk.md](docs/sdk.md).
 ## Status
 
 Hauldr is **pre-alpha** and developed in the open. The foundational
-architectural decisions are settled; implementation is in progress. The first
-milestone is a minimal management API (`createProject`) and a working
-multi-tenant pooling setup. Expect breaking changes until a tagged release.
+architectural decisions are settled. The control plane provisions projects
+end-to-end — auth always, REST / storage / realtime à-la-carte — over a
+multi-tenant pooler, and it already runs a real fleet of applications. What's
+left is operational polish (backups / PITR, tiering, per-project metrics) and a
+one-click migration path. Expect breaking changes until a tagged release.
 
 See the [roadmap](docs/roadmap.md) for what's coming and in what order.
 
