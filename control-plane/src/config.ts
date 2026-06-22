@@ -173,25 +173,35 @@ export function hostFromPattern(pattern: string, name: string): string {
   return pattern.replace(/\{project\}/g, projectHostLabel(name));
 }
 
-export type ServiceKind = "auth" | "rest";
+export type ServiceKind = "auth" | "rest" | "realtime";
+
+/**
+ * The host label for an identity in an environment: `<base>` for prod,
+ * `<base>-dev` for dev. The Supabase model — environment is its OWN host (its
+ * own "ref"), not a path on a shared host. This is what lets Realtime live on
+ * the same host as auth/rest: Realtime resolves its tenant from the host's first
+ * label, so each environment needs a distinct label (prod `ufc` vs dev
+ * `ufc-dev`) for the shared Realtime service to tell them apart.
+ */
+export function envHostLabel(base: string, env: string): string {
+  const b = projectHostLabel(base);
+  return env === "dev" ? `${b}-dev` : b;
+}
 
 /**
  * The public endpoint for a project's service, resolved per the active routing
  * mode:
  *
- *   - Namespace mode (HAULDR_NAMESPACE_PATTERN set): one host per logical
- *     identity (`base`), service + environment selected by path. `host` is the
- *     bare DNS name (covered by the `*.<namespace>` wildcard record, so it needs
- *     no per-project DNS); `domain` carries the path the orchestrator turns into
- *     PathPrefix + stripprefix. `wildcardDns` is true → the per-project DNS
- *     upsert/delete is skipped (the wildcard already resolves it, and prod/dev
- *     share the host so deleting one must not break the other).
+ *   - Namespace mode (HAULDR_NAMESPACE_PATTERN set): one host per environment —
+ *     `<base>[-dev].hauldr.<zone>` — with every service path-routed under it
+ *     (`/auth`, `/rest`, `/realtime`). `host` is the bare DNS name (covered by
+ *     the `*.<namespace>` wildcard record, so no per-project DNS); `domain`
+ *     carries the path the proxy turns into PathPrefix + stripprefix. The host's
+ *     first label IS the environment's identity, so Realtime derives its tenant
+ *     from it. `wildcardDns` true → per-project DNS upsert/delete skipped.
  *
- *   - Legacy mode: one host per service (auth-<project> / rest-<project>), no
- *     path. `wildcardDns` is false → DNS is managed per host as before.
- *
- * `base` is the logical identity (prod and dev of the same app share it); `env`
- * inserts a `/dev` segment for the dev environment.
+ *   - Legacy mode: one host per service (auth-<project> / rest-<project> /
+ *     realtime-<project>), no path. `wildcardDns` false → DNS managed per host.
  */
 export function endpointFor(
   base: string,
@@ -199,19 +209,22 @@ export function endpointFor(
   service: ServiceKind,
 ): { host: string; domain: string; wildcardDns: boolean } {
   if (config.namespacePattern) {
-    const host = hostFromPattern(config.namespacePattern, base);
-    const envSeg = env === "dev" ? "/dev" : "";
-    const domain = `${config.endpointScheme}://${host}${envSeg}/${service}`;
-    return { host, domain, wildcardDns: true };
+    const host = hostFromPattern(config.namespacePattern, envHostLabel(base, env));
+    return { host, domain: `${config.endpointScheme}://${host}/${service}`, wildcardDns: true };
   }
-  const legacy = service === "auth" ? config.authDomainPattern : config.restDomainPattern;
+  const legacy =
+    service === "auth"
+      ? config.authDomainPattern
+      : service === "rest"
+        ? config.restDomainPattern
+        : config.realtimeDomainPattern;
   if (!legacy) {
     throw new Error(
-      service === "auth"
-        ? "no auth endpoint configured (set HAULDR_NAMESPACE_PATTERN or HAULDR_AUTH_DOMAIN_PATTERN)"
-        : "no rest endpoint configured (set HAULDR_NAMESPACE_PATTERN or HAULDR_REST_DOMAIN_PATTERN)",
+      `no ${service} endpoint configured (set HAULDR_NAMESPACE_PATTERN or the legacy *_DOMAIN_PATTERN)`,
     );
   }
+  // Legacy realtime host already encodes the tenant in its first label, served
+  // at the host root (no path); auth/rest likewise sit at the host root.
   const host = hostFromPattern(legacy, base);
   return { host, domain: `${config.endpointScheme}://${host}`, wildcardDns: false };
 }

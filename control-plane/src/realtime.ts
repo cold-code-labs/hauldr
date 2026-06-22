@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { controlPool, dbClient } from "./db";
-import { config, hostFromPattern } from "./config";
+import { config, hostFromPattern, endpointFor } from "./config";
 import { ensureHostDns, destroyHostDns } from "./dns";
 
 // Shared Realtime: register / deregister a project as a TENANT of the one shared
@@ -24,26 +24,35 @@ export function realtimeEnabled(): boolean {
   return !!config.realtimeUrl;
 }
 
-/** The public host for a project, e.g. realtime-<proj>.example.com (no scheme). */
-function hostFor(name: string): string {
-  return config.realtimeDomainPattern
-    ? hostFromPattern(config.realtimeDomainPattern, name)
-    : "";
+/** A project's (base, env) identity, for endpoint + tenant resolution. */
+async function identityOf(name: string): Promise<{ base: string; env: string }> {
+  const { rows } = await controlPool.query(
+    "select base_name, env from projects where name = $1",
+    [name],
+  );
+  return {
+    base: (rows[0]?.base_name as string | undefined) ?? name,
+    env: (rows[0]?.env as string | undefined) ?? "prod",
+  };
 }
 
-/** The tenant id Realtime derives from the public host's first label. */
-function externalIdFor(name: string): string {
-  const host = hostFor(name);
-  return host ? host.split(".")[0] : `realtime-${name}`;
-}
-
-/** The public host the SDK connects to (front of the shared service). */
-function publicUrlFor(name: string): string {
-  if (config.realtimeDomainPattern) {
-    const host = hostFromPattern(config.realtimeDomainPattern, name);
-    return `${config.endpointScheme}://${host}`;
+/**
+ * The project's Realtime endpoint. Namespace mode: `<base>[-dev].hauldr.<zone>/realtime`
+ * (same host as auth/rest) — the SDK appends `/socket/websocket`, the proxy strips
+ * `/realtime` and PRESERVES the Host, so the shared Realtime service resolves the
+ * tenant from the host's first label. Legacy mode: the dedicated `realtime-<proj>`
+ * host at the root. `externalId` (the tenant id) is always that first label.
+ */
+function realtimeEndpoint(base: string, env: string): { url: string; externalId: string; host: string } {
+  if (config.namespacePattern) {
+    const ep = endpointFor(base, env, "realtime");
+    return { url: ep.domain, externalId: ep.host.split(".")[0], host: ep.host };
   }
-  return config.realtimeUrl;
+  if (config.realtimeDomainPattern) {
+    const host = hostFromPattern(config.realtimeDomainPattern, base);
+    return { url: `${config.endpointScheme}://${host}`, externalId: host.split(".")[0], host };
+  }
+  return { url: config.realtimeUrl, externalId: `realtime-${base}`, host: "" };
 }
 
 // RLS for private channels. Realtime's per-tenant migrations create
@@ -122,7 +131,9 @@ export async function provisionRealtime(name: string): Promise<ProjectRealtime> 
     await target.end();
   }
 
-  const externalId = externalIdFor(name);
+  const { base, env } = await identityOf(name);
+  const endpoint = realtimeEndpoint(base, env);
+  const externalId = endpoint.externalId;
   const admin = new URL(config.adminUrl);
   const body = {
     tenant: {
@@ -172,22 +183,21 @@ export async function provisionRealtime(name: string): Promise<ProjectRealtime> 
   // channels usable by authenticated users.
   await applyRealtimeRls(row.database);
 
-  // Point the project's public Realtime host at the edge (a no-op unless a DNS
-  // provisioner is configured). This is the per-project opt-in for the browser
-  // (WS) leg. Best-effort: the tenant is already registered and usable in-network,
-  // so a DNS hiccup must not fail the whole opt-in — the host can be (re)pointed
-  // later by re-running this. The edge router for the host is provisioned
-  // separately (the shared service is fronted by one rule).
-  const host = hostFor(name);
-  if (host) {
+  // Point the project's public Realtime host at the edge. In namespace mode the
+  // host is covered by the `*.hauldr` wildcard (endpoint.host's record already
+  // resolves) so this is skipped; in legacy mode it upserts the dedicated host.
+  // Best-effort: the tenant is already registered and usable in-network, so a DNS
+  // hiccup must not fail the opt-in. The edge router is one shared rule (Host
+  // `*.hauldr` && PathPrefix `/realtime` → strip → shared service, Host kept).
+  if (endpoint.host && !config.namespacePattern) {
     try {
-      await ensureHostDns(host);
+      await ensureHostDns(endpoint.host);
     } catch (e) {
-      console.warn(`realtime: DNS for ${host} not set (${(e as Error).message}) — point it manually`);
+      console.warn(`realtime: DNS for ${endpoint.host} not set (${(e as Error).message}) — point it manually`);
     }
   }
 
-  const realtimeUrl = publicUrlFor(name);
+  const realtimeUrl = endpoint.url;
   await controlPool.query(
     "update projects set realtime_url = $2, realtime_external_id = $3 where name = $1",
     [name, realtimeUrl, externalId],
@@ -197,15 +207,15 @@ export async function provisionRealtime(name: string): Promise<ProjectRealtime> 
 
 /** Deregister a project's Realtime tenant + drop its public host DNS. Idempotent. */
 export async function destroyRealtime(name: string): Promise<void> {
+  const { base, env } = await identityOf(name);
+  const endpoint = realtimeEndpoint(base, env);
   if (realtimeEnabled()) {
-    const externalId = externalIdFor(name);
-    await fetch(`${config.realtimeUrl}/api/tenants/${externalId}`, {
+    await fetch(`${config.realtimeUrl}/api/tenants/${endpoint.externalId}`, {
       method: "DELETE",
       headers: { authorization: `Bearer ${adminToken()}` },
     }).catch(() => {});
   }
-  const host = hostFor(name);
-  if (host) await destroyHostDns(host).catch(() => {});
+  if (endpoint.host && !config.namespacePattern) await destroyHostDns(endpoint.host).catch(() => {});
   await controlPool
     .query(
       "update projects set realtime_url = null, realtime_external_id = null where name = $1",
