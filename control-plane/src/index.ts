@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { listProjects, destroyProject } from "./provision";
 import { startProvision, getProjectDetail } from "./lifecycle";
 import { provisionRest, destroyRest } from "./postgrest";
+import { provisionAuth, destroyAuth } from "./gotrue";
 import { provisionRealtime, destroyRealtime } from "./realtime";
 import { provisionStorageApi, destroyStorageApi } from "./storageapi";
 import { ensureMaster } from "./zero";
@@ -189,6 +190,27 @@ app.delete("/v1/projects/:name/services/rest", async (c) => {
   try {
     await destroyRest(c.req.param("name"));
     return c.json({ name: c.req.param("name"), rest: "removed" });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// Auth (GoTrue) — provisioned at create time, but also exposed à-la-carte so an
+// idle backend (e.g. an on-demand preview) can drop its compute and keep only
+// the database, then bring auth back on demand. Both calls are idempotent.
+app.post("/v1/projects/:name/services/auth", async (c) => {
+  try {
+    const res = await provisionAuth(c.req.param("name"));
+    return c.json(res, 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+app.delete("/v1/projects/:name/services/auth", async (c) => {
+  try {
+    await destroyAuth(c.req.param("name"));
+    return c.json({ name: c.req.param("name"), auth: "removed" });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }
