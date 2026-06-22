@@ -26,15 +26,19 @@ function internalDbUrl(database: string): string {
 }
 
 /** Prepare a project's db for GoTrue (auth schema + search_path) and ensure a stable JWT secret. */
-async function prepareAuth(name: string): Promise<{ database: string; jwtSecret: string }> {
+async function prepareAuth(
+  name: string,
+): Promise<{ database: string; jwtSecret: string; base: string; env: string }> {
   const database = `db_${name}`;
   const prev = await controlPool.query(
-    "select jwt_secret from projects where name = $1",
+    "select jwt_secret, base_name, env from projects where name = $1",
     [name],
   );
   const jwtSecret =
     (prev.rows[0]?.jwt_secret as string | undefined) ??
     crypto.randomBytes(32).toString("hex");
+  const base = (prev.rows[0]?.base_name as string | undefined) ?? name;
+  const env = (prev.rows[0]?.env as string | undefined) ?? "prod";
 
   const admin = adminClient();
   await admin.connect();
@@ -57,7 +61,7 @@ async function prepareAuth(name: string): Promise<{ database: string; jwtSecret:
     name,
     jwtSecret,
   ]);
-  return { database, jwtSecret };
+  return { database, jwtSecret, base, env };
 }
 
 /**
@@ -70,12 +74,12 @@ async function prepareAuth(name: string): Promise<{ database: string; jwtSecret:
  * The database preparation and JWT-secret contract are identical either way.
  */
 export async function provisionAuth(name: string): Promise<ProjectAuth> {
-  const { database, jwtSecret } = await prepareAuth(name);
+  const { database, jwtSecret, base, env } = await prepareAuth(name);
   const dbUrl = internalDbUrl(database);
 
   const endpoint =
     config.authProvisioner === "coolify"
-      ? await coolifyProvisionGotrue(name, dbUrl, jwtSecret)
+      ? await coolifyProvisionGotrue(name, dbUrl, jwtSecret, base, env)
       : await dockerProvisionGotrue(name, dbUrl, jwtSecret);
 
   await controlPool.query(
@@ -88,10 +92,23 @@ export async function provisionAuth(name: string): Promise<ProjectAuth> {
 /** Tear down a project's GoTrue (matches the active provisioner). Idempotent. */
 export async function destroyAuth(name: string): Promise<void> {
   if (config.authProvisioner === "coolify") {
-    await coolifyDestroyGotrue(name).catch(() => {});
+    const { base, env } = await projectIdentity(name);
+    await coolifyDestroyGotrue(name, base, env).catch(() => {});
   } else {
     await docker(["rm", "-f", `hauldr-auth-${name}`]).catch(() => {});
   }
+}
+
+/** The logical identity (base) + environment of a project, for endpoint resolution. */
+export async function projectIdentity(name: string): Promise<{ base: string; env: string }> {
+  const { rows } = await controlPool.query(
+    "select base_name, env from projects where name = $1",
+    [name],
+  );
+  return {
+    base: (rows[0]?.base_name as string | undefined) ?? name,
+    env: (rows[0]?.env as string | undefined) ?? "prod",
+  };
 }
 
 // ── Docker reference provisioner ────────────────────────────────────────────

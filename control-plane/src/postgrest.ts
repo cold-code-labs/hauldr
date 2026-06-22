@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { controlPool } from "./db";
 import { config } from "./config";
 import { coolifyProvisionRest, coolifyDestroyRest } from "./coolify";
+import { projectIdentity } from "./gotrue";
 
 const exec = promisify(execFile);
 
@@ -67,10 +68,13 @@ async function prepareRest(
 export async function provisionRest(name: string): Promise<ProjectRest> {
   const { dbUri, jwtSecret } = await prepareRest(name);
 
-  const endpoint =
-    config.restProvisioner === "coolify"
-      ? await coolifyProvisionRest(name, dbUri, jwtSecret)
-      : await dockerProvisionRest(name, dbUri, jwtSecret);
+  let endpoint: ProjectRest;
+  if (config.restProvisioner === "coolify") {
+    const { base, env } = await projectIdentity(name);
+    endpoint = await coolifyProvisionRest(name, dbUri, jwtSecret, base, env);
+  } else {
+    endpoint = await dockerProvisionRest(name, dbUri, jwtSecret);
+  }
 
   await controlPool.query(
     "update projects set postgrest_url = $2, postgrest_container = $3 where name = $1",
@@ -82,7 +86,8 @@ export async function provisionRest(name: string): Promise<ProjectRest> {
 /** Tear down a project's PostgREST (matches the active provisioner). Idempotent. */
 export async function destroyRest(name: string): Promise<void> {
   if (config.restProvisioner === "coolify") {
-    await coolifyDestroyRest(name).catch(() => {});
+    const { base, env } = await projectIdentity(name);
+    await coolifyDestroyRest(name, base, env).catch(() => {});
   } else {
     await docker(["rm", "-f", `hauldr-rest-${name}`]).catch(() => {});
   }

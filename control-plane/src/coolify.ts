@@ -1,5 +1,23 @@
-import { config, hostFromPattern } from "./config";
+import { config, endpointFor, type ServiceKind } from "./config";
 import { ensureHostDns, destroyHostDns } from "./dns";
+
+/**
+ * Resolve a project's public endpoint for a service and (in legacy host-per-
+ * service mode) point its DNS at the edge. In namespace mode the host is covered
+ * by the `*.<namespace>` wildcard, so no per-project record is created. Returns
+ * the values the caller bakes into the app: `domain` (with the path the
+ * orchestrator turns into PathPrefix + stripprefix) and `url` (same string —
+ * the public base the service advertises and is probed at).
+ */
+async function ensureEndpoint(
+  base: string,
+  env: string,
+  service: ServiceKind,
+): Promise<{ domain: string; url: string; host: string }> {
+  const ep = endpointFor(base, env, service);
+  if (!ep.wildcardDns) await ensureHostDns(ep.host);
+  return { domain: ep.domain, url: ep.domain, host: ep.host };
+}
 
 /**
  * Coolify auth provisioner — brings up a per-project GoTrue as a Coolify
@@ -114,17 +132,18 @@ export async function waitAppGone(name: string, tries = 20): Promise<void> {
 
 export type CoolifyEndpoint = { gotrueUrl: string; handle: string };
 
-/** Provision a per-project GoTrue as a Coolify docker-image app. */
+/** Provision a per-project GoTrue as a Coolify docker-image app. `base`/`environment`
+ *  resolve the public endpoint: namespace mode path-routes `<base>.hauldr…[/dev]/auth`
+ *  (Coolify strips the prefix; GOTRUE_API_EXTERNAL_URL keeps the full external path so
+ *  GoTrue's generated links stay correct), legacy mode keeps auth-<project>. */
 export async function coolifyProvisionGotrue(
   name: string,
   dbUrl: string,
   jwtSecret: string,
+  base: string,
+  environment: string,
 ): Promise<CoolifyEndpoint> {
-  if (!config.authDomainPattern) {
-    throw new Error("HAULDR_AUTH_DOMAIN_PATTERN is not set (e.g. 'auth-{project}.example.com')");
-  }
-  const host = hostFromPattern(config.authDomainPattern, name);
-  const gotrueUrl = `${config.endpointScheme}://${host}`;
+  const { domain: gotrueUrl } = await ensureEndpoint(base, environment, "auth");
   const appName = `hauldr-auth-${name}`;
 
   const appUuid = await createDockerImageApp({
@@ -154,23 +173,24 @@ export async function coolifyProvisionGotrue(
   for (const [k, v] of Object.entries(env)) await setEnv(appUuid, k, v);
   await deployApp(appUuid);
 
-  // Publish the host at the edge, so it routes from outside (no-op unless a DNS
-  // provisioner is configured). After deploy: a failed deploy leaves no record.
-  await ensureHostDns(host);
-
   return { gotrueUrl, handle: appUuid };
 }
 
-export async function coolifyDestroyGotrue(name: string): Promise<void> {
+export async function coolifyDestroyGotrue(
+  name: string,
+  base: string,
+  environment: string,
+): Promise<void> {
   const appName = `hauldr-auth-${name}`;
   const appUuid = await findAppByName(appName);
   if (appUuid) {
     await destroyApp(appUuid);
     await waitAppGone(appName);
   }
-  if (config.authDomainPattern) {
-    await destroyHostDns(hostFromPattern(config.authDomainPattern, name));
-  }
+  // Per-project DNS only exists in legacy host-per-service mode; in namespace
+  // mode the wildcard covers it and prod/dev share the host, so leave DNS alone.
+  const ep = endpointFor(base, environment, "auth");
+  if (!ep.wildcardDns) await destroyHostDns(ep.host);
 }
 
 export type CoolifyRestEndpoint = { restUrl: string; handle: string };
@@ -187,12 +207,10 @@ export async function coolifyProvisionRest(
   name: string,
   dbUri: string,
   jwtSecret: string,
+  base: string,
+  environment: string,
 ): Promise<CoolifyRestEndpoint> {
-  if (!config.restDomainPattern) {
-    throw new Error("HAULDR_REST_DOMAIN_PATTERN is not set (e.g. 'rest-{project}.example.com')");
-  }
-  const host = hostFromPattern(config.restDomainPattern, name);
-  const restUrl = `${config.endpointScheme}://${host}`;
+  const { domain: restUrl } = await ensureEndpoint(base, environment, "rest");
   const appName = `hauldr-rest-${name}`;
 
   const appUuid = await createDockerImageApp({
@@ -219,19 +237,20 @@ export async function coolifyProvisionRest(
   for (const [k, v] of Object.entries(env)) await setEnv(appUuid, k, v);
   await deployApp(appUuid);
 
-  await ensureHostDns(host);
-
   return { restUrl, handle: appUuid };
 }
 
-export async function coolifyDestroyRest(name: string): Promise<void> {
+export async function coolifyDestroyRest(
+  name: string,
+  base: string,
+  environment: string,
+): Promise<void> {
   const appName = `hauldr-rest-${name}`;
   const appUuid = await findAppByName(appName);
   if (appUuid) {
     await destroyApp(appUuid);
     await waitAppGone(appName);
   }
-  if (config.restDomainPattern) {
-    await destroyHostDns(hostFromPattern(config.restDomainPattern, name));
-  }
+  const ep = endpointFor(base, environment, "rest");
+  if (!ep.wildcardDns) await destroyHostDns(ep.host);
 }

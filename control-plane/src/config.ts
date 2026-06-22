@@ -108,6 +108,16 @@ export const config = {
   // distinct from the auth pattern so the two endpoints never collide.
   restDomainPattern: process.env.HAULDR_REST_DOMAIN_PATTERN ?? "",
 
+  // Namespace mode (preferred). One host per logical project — `{project}`
+  // substituted with the base identity's host label, e.g.
+  // "{project}.hauldr.example.com". Services are path-routed under it (`/auth`,
+  // `/rest`) and the dev environment under a `/dev` prefix, so prod and dev of
+  // the same identity share one host + one wildcard DNS record + one cert. The
+  // orchestrator (Coolify) generates the PathPrefix + stripprefix routing from
+  // the path in the app's domain. When empty, the legacy host-per-service mode
+  // (authDomainPattern / restDomainPattern) is used instead.
+  namespacePattern: process.env.HAULDR_NAMESPACE_PATTERN ?? "",
+
   // Realtime — the SHARED, multi-tenant Realtime service (broadcast / presence /
   // postgres-changes over WebSocket). Unlike auth/REST it is NOT per-project: one
   // service serves every project, each registered as a Realtime "tenant" via its
@@ -161,4 +171,47 @@ export function projectHostLabel(name: string): string {
 /** Substitute {project} in a domain pattern with the host-safe label. */
 export function hostFromPattern(pattern: string, name: string): string {
   return pattern.replace(/\{project\}/g, projectHostLabel(name));
+}
+
+export type ServiceKind = "auth" | "rest";
+
+/**
+ * The public endpoint for a project's service, resolved per the active routing
+ * mode:
+ *
+ *   - Namespace mode (HAULDR_NAMESPACE_PATTERN set): one host per logical
+ *     identity (`base`), service + environment selected by path. `host` is the
+ *     bare DNS name (covered by the `*.<namespace>` wildcard record, so it needs
+ *     no per-project DNS); `domain` carries the path the orchestrator turns into
+ *     PathPrefix + stripprefix. `wildcardDns` is true → the per-project DNS
+ *     upsert/delete is skipped (the wildcard already resolves it, and prod/dev
+ *     share the host so deleting one must not break the other).
+ *
+ *   - Legacy mode: one host per service (auth-<project> / rest-<project>), no
+ *     path. `wildcardDns` is false → DNS is managed per host as before.
+ *
+ * `base` is the logical identity (prod and dev of the same app share it); `env`
+ * inserts a `/dev` segment for the dev environment.
+ */
+export function endpointFor(
+  base: string,
+  env: string,
+  service: ServiceKind,
+): { host: string; domain: string; wildcardDns: boolean } {
+  if (config.namespacePattern) {
+    const host = hostFromPattern(config.namespacePattern, base);
+    const envSeg = env === "dev" ? "/dev" : "";
+    const domain = `${config.endpointScheme}://${host}${envSeg}/${service}`;
+    return { host, domain, wildcardDns: true };
+  }
+  const legacy = service === "auth" ? config.authDomainPattern : config.restDomainPattern;
+  if (!legacy) {
+    throw new Error(
+      service === "auth"
+        ? "no auth endpoint configured (set HAULDR_NAMESPACE_PATTERN or HAULDR_AUTH_DOMAIN_PATTERN)"
+        : "no rest endpoint configured (set HAULDR_NAMESPACE_PATTERN or HAULDR_REST_DOMAIN_PATTERN)",
+    );
+  }
+  const host = hostFromPattern(legacy, base);
+  return { host, domain: `${config.endpointScheme}://${host}`, wildcardDns: false };
 }
