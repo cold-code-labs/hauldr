@@ -7,17 +7,8 @@ on:
 
 jobs:
   typecheck:
-    name: typecheck (${{ matrix.package }})
+    name: typecheck
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package:
-          - control-plane
-          - packages/client
-    defaults:
-      run:
-        working-directory: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,9 +19,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: ${{ matrix.package }}/pnpm-lock.yaml
 
-      - run: pnpm install --frozen-lockfile
+      # control-plane typechecks against the client SDK source (../packages/client),
+      # so both sets of dependencies must be present.
+      - name: install deps
+        run: |
+          pnpm --dir packages/client install --frozen-lockfile
+          pnpm --dir control-plane install --frozen-lockfile
 
-      - run: pnpm exec tsc --noEmit
+      - name: typecheck client SDK
+        run: pnpm --dir packages/client exec tsc --noEmit
+
+      - name: typecheck control-plane
+        run: pnpm --dir control-plane exec tsc --noEmit
