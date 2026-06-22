@@ -20,6 +20,11 @@ export const config = {
   // must carry `Authorization: Bearer <key>`. Empty = open (dev only).
   apiKey: process.env.HAULDR_API_KEY ?? "",
 
+  // Signing secret for per-project migrate tokens (scoped credentials an app's
+  // deploy uses to apply its own schema). Falls back to the management API key,
+  // so rotating that rotates the migrate tokens too.
+  migrateSecret: process.env.HAULDR_MIGRATE_SECRET ?? "",
+
   // Auth — project zero (GoTrue) + panel JWT verification.
   jwtSecret: process.env.HAULDR_JWT_SECRET ?? "",
   zeroDb: process.env.HAULDR_ZERO_DB ?? "hauldr_zero",

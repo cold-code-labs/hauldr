@@ -5,6 +5,7 @@ import { provisionAuth } from "./gotrue";
 import { provisionRest } from "./postgrest";
 import { storageEnabled, provisionStorage } from "./storage";
 import { defaultOrgId } from "./orgs";
+import { signMigrateToken } from "./migrate-auth";
 
 const SLUG = /^[a-z][a-z0-9_]{1,40}$/;
 
@@ -211,6 +212,9 @@ export async function getProjectDetail(name: string) {
           role: r.role,
           dbUrl: internalDbUrl(r.database, r.role, r.db_password),
           jwtSecret: r.jwt_secret ?? null,
+          // Scoped credential an app's deploy uses to apply its own schema
+          // (POST /v1/projects/<name>/migrate) without the global management key.
+          migrateToken: signMigrateToken(r.name),
         }
       : null,
     // S3 storage block an app feeds to createClient({ storage }) — one bucket/key

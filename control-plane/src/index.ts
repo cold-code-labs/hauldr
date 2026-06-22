@@ -6,6 +6,7 @@ import { provisionRest, destroyRest } from "./postgrest";
 import { provisionRealtime, destroyRealtime } from "./realtime";
 import { ensureMaster } from "./zero";
 import { migrateProject } from "./migrate";
+import { signMigrateToken, verifyMigrateToken } from "./migrate-auth";
 import {
   listOrganizations,
   createOrganization,
@@ -22,6 +23,9 @@ const app = new Hono();
  * /v1 (the API can create databases — never leave it open in production).
  */
 app.use("/v1/*", async (c, next) => {
+  // The migrate route authenticates itself (global key OR a per-project scoped
+  // token), so it's exempt from the global-key-only guard here.
+  if (c.req.method === "POST" && c.req.path.endsWith("/migrate")) return next();
   if (!config.apiKey) {
     return c.json({ error: "HAULDR_API_KEY not configured" }, 503);
   }
@@ -154,6 +158,13 @@ app.post("/v1/projects", async (c) => {
   }
 });
 
+// Mint the project's scoped migrate token — the credential an app's deploy uses
+// to apply its own schema (and that an operator can drop into the app env).
+// Global-key gated; the token itself only authorizes migrate on this project.
+app.get("/v1/projects/:name/migrate-token", (c) =>
+  c.json({ name: c.req.param("name"), token: signMigrateToken(c.req.param("name")) }),
+);
+
 app.delete("/v1/projects/:name", async (c) => {
   try {
     const res = await destroyProject(c.req.param("name"));
@@ -208,14 +219,17 @@ app.delete("/v1/projects/:name/services/realtime", async (c) => {
 //   curl -X POST .../v1/projects/<name>/migrate?name=0009_foo \
 //        -H "Authorization: Bearer <key>" --data-binary @db/migrations/0009_foo.sql
 app.post("/v1/projects/:name/migrate", async (c) => {
+  const project = c.req.param("name");
+  const auth = c.req.header("Authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  const authorized =
+    (!!config.apiKey && token === config.apiKey) || verifyMigrateToken(token, project);
+  if (!authorized) return c.json({ error: "unauthorized" }, 401);
+
   const sql = await c.req.text();
   if (!sql.trim()) return c.json({ error: "empty SQL body" }, 400);
   try {
-    const res = await migrateProject(
-      c.req.param("name"),
-      sql,
-      c.req.query("name") || undefined,
-    );
+    const res = await migrateProject(project, sql, c.req.query("name") || undefined);
     return c.json(res, res.applied ? 201 : 200);
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
