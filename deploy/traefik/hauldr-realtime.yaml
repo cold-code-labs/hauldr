@@ -1,16 +1,25 @@
 # Traefik file-provider route for the shared Realtime service.
 #
 # Realtime is multi-tenant: ONE service serves every project, and the tenant is
-# resolved from the request host's first label. So a single HostRegexp rule routes
-# every project's host (realtime-<project>.<domain>) to the one container — no
-# per-service compose labels, no per-project router.
+# resolved from the request host's FIRST LABEL. In namespace mode every project
+# environment is its own host (<base>[-dev].hauldr.<zone>), so a single HostRegexp
+# rule routes every project's host to the one container — no per-service compose
+# labels, no per-project router. The Host header is PRESERVED (no rewrite) so the
+# service still sees the first label and picks the tenant.
+#
+# Two client dialects share the service, by path:
+#   native   : /realtime/...    -> strip /realtime               (Hauldr SDK connects to /realtime/socket/websocket)
+#   supabase : /realtime/v1/... -> strip /realtime/v1 + add /socket (supabase-js connects to /realtime/v1/websocket)
+# Serving the supabase path lets a migrated supabase-js app reach Realtime by
+# pointing its base URL at the bare host — no code change. Traefik prefers the
+# longer PathPrefix, so /realtime/v1/* matches the supabase router and every
+# other /realtime/* matches the native one.
 #
 # Why a file-provider route (not docker-compose Traefik labels): on a Coolify
 # deploy, Coolify owns Traefik and generates routers only from its own domain
 # config (exact Host per service) — it does not honour a per-service HostRegexp on
-# a shared container. Dropping this file in the proxy's dynamic directory routes
-# the wildcard independently. On a plain docker + Traefik deploy you can instead
-# put the equivalent labels on the realtime service.
+# a shared container, nor a path rewrite. Dropping this file in the proxy's
+# dynamic directory routes the wildcard independently.
 #
 # Install (Coolify): copy to the proxy's dynamic config dir on the host running
 # the realtime service, e.g. /data/coolify/proxy/dynamic/hauldr-realtime.yaml
@@ -20,18 +29,34 @@
 # plain http — matching Coolify's per-app routers. WebSocket upgrades pass through
 # Traefik transparently.
 #
-# Per-project opt-in stays elsewhere: a project is reachable only once it (a) is
-# registered as a Realtime tenant and (b) has a DNS record for its host pointing
-# at this edge — both done by the control plane's services/realtime endpoint.
+# Per-project opt-in stays elsewhere: a project is reachable only once it is
+# registered as a Realtime tenant by the control plane's services/realtime
+# endpoint (the *.hauldr wildcard DNS already covers the host).
 
 http:
   routers:
+    hauldr-realtime-v1:
+      entryPoints: [http]
+      rule: HostRegexp(`^[a-z0-9-]+\.hauldr\.coldcodelabs\.com$`) && PathPrefix(`/realtime/v1`)
+      middlewares: [hauldr-realtime-v1-strip, hauldr-realtime-v1-prefix, hauldr-realtime-gzip]
+      service: hauldr-realtime
     hauldr-realtime:
       entryPoints: [http]
-      middlewares: [hauldr-realtime-gzip]
+      rule: HostRegexp(`^[a-z0-9-]+\.hauldr\.coldcodelabs\.com$`) && PathPrefix(`/realtime`)
+      middlewares: [hauldr-realtime-strip, hauldr-realtime-gzip]
       service: hauldr-realtime
-      rule: HostRegexp(`^realtime-[a-z0-9-]+\.coldcodelabs\.com$`)
   middlewares:
+    hauldr-realtime-strip:
+      stripPrefix:
+        prefixes:
+          - /realtime
+    hauldr-realtime-v1-strip:
+      stripPrefix:
+        prefixes:
+          - /realtime/v1
+    hauldr-realtime-v1-prefix:
+      addPrefix:
+        prefix: /socket
     hauldr-realtime-gzip:
       compress: true
   services:
