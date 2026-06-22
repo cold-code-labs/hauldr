@@ -5,6 +5,7 @@ import { startProvision, getProjectDetail } from "./lifecycle";
 import { provisionRest, destroyRest } from "./postgrest";
 import { provisionRealtime, destroyRealtime } from "./realtime";
 import { ensureMaster } from "./zero";
+import { migrateProject } from "./migrate";
 import {
   listOrganizations,
   createOrganization,
@@ -196,6 +197,26 @@ app.delete("/v1/projects/:name/services/realtime", async (c) => {
   try {
     await destroyRealtime(c.req.param("name"));
     return c.json({ name: c.req.param("name"), realtime: "removed" });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// Schema migration. The project DB is internal-only (no public Postgres), so an
+// app applies its `db/migrations/NNNN_*.sql` through here instead of a public
+// connection string — tracked + idempotent (re-sending the same name is a no-op).
+//   curl -X POST .../v1/projects/<name>/migrate?name=0009_foo \
+//        -H "Authorization: Bearer <key>" --data-binary @db/migrations/0009_foo.sql
+app.post("/v1/projects/:name/migrate", async (c) => {
+  const sql = await c.req.text();
+  if (!sql.trim()) return c.json({ error: "empty SQL body" }, 400);
+  try {
+    const res = await migrateProject(
+      c.req.param("name"),
+      sql,
+      c.req.query("name") || undefined,
+    );
+    return c.json(res, res.applied ? 201 : 200);
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }
