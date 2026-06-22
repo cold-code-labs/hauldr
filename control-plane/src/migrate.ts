@@ -71,6 +71,10 @@ export async function migrateProject(
   const c = dbClient(`db_${project}`);
   await c.connect();
   try {
+    // A project DB is search_path = auth, public (set for GoTrue). Pin it to
+    // public for this whole session so the tracking table AND the migration's
+    // unqualified DDL land in public; explicit `auth.*` references still resolve.
+    await c.query("set search_path = public");
     await c.query(
       `create table if not exists _app_migrations (
          name text primary key,
@@ -85,7 +89,6 @@ export async function migrateProject(
 
     await c.query("begin");
     try {
-      await c.query("set local search_path = public");
       await c.query(sql);
       await c.query("insert into _app_migrations(name) values ($1)", [migrationName]);
       await c.query("commit");
