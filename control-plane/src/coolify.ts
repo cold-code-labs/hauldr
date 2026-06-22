@@ -131,6 +131,15 @@ export async function updateAppDomains(appUuid: string, domains: string): Promis
   await coolify(`/applications/${appUuid}`, { method: "PATCH", body: { domains } });
 }
 
+/** An application's currently-routed domains (Coolify `fqdn`), for drift checks. */
+export async function getAppDomains(appUuid: string): Promise<string[]> {
+  const app = await coolify<{ fqdn?: string | null }>(`/applications/${appUuid}`);
+  return (app.fqdn ?? "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean);
+}
+
 export async function deployApp(appUuid: string): Promise<void> {
   await coolify(`/deploy?uuid=${appUuid}&force=false`);
 }

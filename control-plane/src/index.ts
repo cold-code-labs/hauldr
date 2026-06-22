@@ -8,6 +8,7 @@ import { provisionRealtime, destroyRealtime } from "./realtime";
 import { provisionStorageApi, destroyStorageApi } from "./storageapi";
 import { ensureMaster } from "./zero";
 import { migrateProject } from "./migrate";
+import { reconcileProject, reconcileAll } from "./reconcile";
 import { signMigrateToken, verifyMigrateToken } from "./migrate-auth";
 import {
   listOrganizations,
@@ -190,6 +191,25 @@ app.delete("/v1/projects/:name/services/rest", async (c) => {
   try {
     await destroyRest(c.req.param("name"));
     return c.json({ name: c.req.param("name"), rest: "removed" });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// Reconcile — re-apply the current routing shape (namespace + `/v1` alias) to a
+// project's existing sidecars, healing drift from older provisioning. Domain-only
+// + redeploy; never touches envs/secret/db. `/v1/reconcile` sweeps the whole fleet.
+app.post("/v1/projects/:name/reconcile", async (c) => {
+  try {
+    return c.json(await reconcileProject(c.req.param("name")));
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+app.post("/v1/reconcile", async (c) => {
+  try {
+    return c.json(await reconcileAll());
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }
