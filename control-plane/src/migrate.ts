@@ -45,6 +45,10 @@ export async function applyMigrations(
     }
   }
 
+  // Reload PostgREST's schema cache once if anything new landed, so freshly
+  // created tables/functions are queryable without a restart (see migrateProject).
+  if (applied.length) await client.query("notify pgrst, 'reload schema'");
+
   return applied;
 }
 
@@ -96,6 +100,12 @@ export async function migrateProject(
       await c.query("rollback");
       throw err;
     }
+    // PostgREST caches the DB schema and only reloads on signal — new tables and
+    // functions from this migration are invisible (404 "… in the schema cache")
+    // until then. Tell it to reload so the just-applied DDL is queryable at once,
+    // no restart. Runs on the project DB connection (the one PostgREST listens
+    // on); a no-op when the migration changed no schema-level objects.
+    await c.query("notify pgrst, 'reload schema'");
     return { applied: true, name: migrationName };
   } finally {
     await c.end();
