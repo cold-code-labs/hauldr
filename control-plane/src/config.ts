@@ -233,3 +233,24 @@ export function endpointFor(
   const host = hostFromPattern(legacy, base);
   return { host, domain: `${config.endpointScheme}://${host}`, wildcardDns: false };
 }
+
+/**
+ * The set of domains to register with the orchestrator for a service, ordered
+ * native-first. In namespace mode this is the pair `[<host>/<service>,
+ * <host>/<service>/v1]`: the native Hauldr path plus a Supabase-dialect alias.
+ *
+ * supabase-js hardcodes `/auth/v1`, `/rest/v1`, `/realtime/v1`, `/storage/v1`
+ * off the base URL, so serving `/<service>/v1` beside `/<service>` lets a
+ * migrated supabase-js app plug in by pointing `SUPABASE_URL` at the bare host —
+ * no code change. The two route as separate PathPrefix + stripprefix rules;
+ * Traefik prefers the longer prefix, so `/auth/v1/token` strips to `/token`
+ * (GoTrue) while `/auth/health` strips to `/health`.
+ *
+ * Legacy host-per-service mode serves the service at the host root with no path,
+ * so there is nothing to extend — a single domain, unchanged.
+ */
+export function routeDomainsFor(base: string, env: string, service: ServiceKind): string[] {
+  const ep = endpointFor(base, env, service);
+  if (!config.namespacePattern) return [ep.domain];
+  return [ep.domain, `${ep.domain}/v1`];
+}

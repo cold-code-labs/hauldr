@@ -1,4 +1,4 @@
-import { config, endpointFor, type ServiceKind } from "./config";
+import { config, endpointFor, routeDomainsFor, type ServiceKind } from "./config";
 import { ensureHostDns, destroyHostDns } from "./dns";
 
 /**
@@ -13,10 +13,18 @@ async function ensureEndpoint(
   base: string,
   env: string,
   service: ServiceKind,
-): Promise<{ domain: string; url: string; host: string }> {
+): Promise<{ domain: string; url: string; host: string; domains: string[] }> {
   const ep = endpointFor(base, env, service);
   if (!ep.wildcardDns) await ensureHostDns(ep.host);
-  return { domain: ep.domain, url: ep.domain, host: ep.host };
+  // `domain` is the canonical, native URL the service advertises (`/<service>`);
+  // `domains` is every host the orchestrator should route to it — native plus
+  // the Supabase-dialect `/<service>/v1` alias in namespace mode.
+  return {
+    domain: ep.domain,
+    url: ep.domain,
+    host: ep.host,
+    domains: routeDomainsFor(base, env, service),
+  };
 }
 
 /**
@@ -61,15 +69,21 @@ export async function findAppByName(name: string): Promise<string | null> {
   return apps.find((a) => a.name === name)?.uuid ?? null;
 }
 
-/** Create a docker-image application (idempotent by name). Does not deploy. */
+/** Create a docker-image application (idempotent by name). Does not deploy.
+ *  When the app already exists, its domains are reconciled to `opts.domains` —
+ *  so adding the Supabase-dialect alias to a project provisioned before it
+ *  existed needs only a re-provision, not a destroy+recreate. */
 export async function createDockerImageApp(opts: {
   name: string;
   image: string; // name:tag
   portsExposes: string;
-  domain: string; // https://host
+  domains: string; // comma-separated list of `scheme://host[/path]`
 }): Promise<string> {
   const existing = await findAppByName(opts.name);
-  if (existing) return existing;
+  if (existing) {
+    await updateAppDomains(existing, opts.domains);
+    return existing;
+  }
   const { name: image, tag } = splitImage(opts.image);
   const created = await coolify<{ uuid: string }>("/applications/dockerimage", {
     body: {
@@ -81,7 +95,7 @@ export async function createDockerImageApp(opts: {
       docker_registry_image_tag: tag,
       ports_exposes: opts.portsExposes,
       name: opts.name,
-      domains: opts.domain,
+      domains: opts.domains,
       instant_deploy: false,
     },
   });
@@ -109,6 +123,12 @@ export async function setEnv(appUuid: string, key: string, value: string): Promi
       body: { key, value, is_preview: false },
     });
   }
+}
+
+/** Reconcile an existing application's routed domains (comma-separated list).
+ *  The redeploy that follows regenerates the Traefik labels from them. */
+export async function updateAppDomains(appUuid: string, domains: string): Promise<void> {
+  await coolify(`/applications/${appUuid}`, { method: "PATCH", body: { domains } });
 }
 
 export async function deployApp(appUuid: string): Promise<void> {
@@ -143,14 +163,14 @@ export async function coolifyProvisionGotrue(
   base: string,
   environment: string,
 ): Promise<CoolifyEndpoint> {
-  const { domain: gotrueUrl } = await ensureEndpoint(base, environment, "auth");
+  const { domain: gotrueUrl, domains } = await ensureEndpoint(base, environment, "auth");
   const appName = `hauldr-auth-${name}`;
 
   const appUuid = await createDockerImageApp({
     name: appName,
     image: config.gotrueImage,
     portsExposes: "9999",
-    domain: gotrueUrl,
+    domains: domains.join(","),
   });
 
   const env: Record<string, string> = {
@@ -210,14 +230,14 @@ export async function coolifyProvisionRest(
   base: string,
   environment: string,
 ): Promise<CoolifyRestEndpoint> {
-  const { domain: restUrl } = await ensureEndpoint(base, environment, "rest");
+  const { domain: restUrl, domains } = await ensureEndpoint(base, environment, "rest");
   const appName = `hauldr-rest-${name}`;
 
   const appUuid = await createDockerImageApp({
     name: appName,
     image: config.restImage,
     portsExposes: "3000",
-    domain: restUrl,
+    domains: domains.join(","),
   });
 
   const env: Record<string, string> = {

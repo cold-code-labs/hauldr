@@ -51,7 +51,7 @@ async function main() {
     name,
     image: "traefik/whoami:latest",
     portsExposes: "80",
-    domain,
+    domains: domain,
   });
   assert(!!appUuid, "createDockerImageApp returns an app uuid");
 
