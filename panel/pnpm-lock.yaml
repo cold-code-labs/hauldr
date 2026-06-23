@@ -12,8 +12,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(react@19.2.7)
       '@cold-code-labs/yggdrasil-react':
-        specifier: ^0.1.0
-        version: 0.1.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@3.4.19)
+        specifier: ^0.2.2
+        version: 0.2.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@3.4.19)
       '@cold-code-labs/yggdrasil-tokens':
         specifier: ^0.2.0
         version: 0.2.0
@@ -63,8 +63,8 @@ packages:
     peerDependencies:
       react: '>=18'
 
-  '@cold-code-labs/yggdrasil-react@0.1.0':
-    resolution: {integrity: sha512-NOITCsmO8PrjG+f2+Fn/rDNCZLh2tNN7YHvPuxvhobx54WxEoA761rFUeRR1iOdUyf4KNQNJtmQryzc3kZdslw==, tarball: https://npm.pkg.github.com/download/@cold-code-labs/yggdrasil-react/0.1.0/af82f9f2af8cbf36efdfaae9466711e1bec30ea5}
+  '@cold-code-labs/yggdrasil-react@0.2.2':
+    resolution: {integrity: sha512-6y/trEnc3Xmk2N7BTzFn8ruJ1sPEtf5ue3cB2ylrV5pm06+8S4YFpOjnE8Gx3mw0r6CRV7N6CWVVRL2fjIEO7g==, tarball: https://npm.pkg.github.com/download/@cold-code-labs/yggdrasil-react/0.2.2/54282f483023e4e2074f37e8ce3afc063bae9848}
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -1188,7 +1188,7 @@ snapshots:
     dependencies:
       react: 19.2.7
 
-  '@cold-code-labs/yggdrasil-react@0.1.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@3.4.19)':
+  '@cold-code-labs/yggdrasil-react@0.2.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@3.4.19)':
     dependencies:
       '@radix-ui/react-dialog': 1.1.17(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-dropdown-menu': 2.1.18(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

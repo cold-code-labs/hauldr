@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "@cold-code-labs/yggdrasil-tokens/css";
+import "@cold-code-labs/yggdrasil-react/shell.css";
 import "./globals.css";
 import { Providers } from "./providers";
 

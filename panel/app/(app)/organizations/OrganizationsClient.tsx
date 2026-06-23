@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
+import { Button, Input } from "@cold-code-labs/yggdrasil-react";
 import type { Org } from "../../../lib/api";
 import { Icon } from "../../icons";
 import { setOrgAction } from "../actions";
@@ -67,9 +68,9 @@ export function OrganizationsClient({
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
-        <button className="btn btn-primary" type="button" onClick={() => setOpen(true)}>
+        <Button type="button" onClick={() => setOpen(true)}>
           <Icon name="plus" /> New organization
-        </button>
+        </Button>
       </div>
 
       {initial.length === 0 ? (
@@ -138,9 +139,8 @@ export function OrganizationsClient({
                 <label className="label" htmlFor="orgname">
                   Organization name
                 </label>
-                <input
+                <Input
                   id="orgname"
-                  className="input"
                   placeholder="e.g. Cold Code Labs"
                   value={name}
                   autoFocus
@@ -153,17 +153,17 @@ export function OrganizationsClient({
               {error && <div className="form-error">{error}</div>}
 
               <div className="modal-foot">
-                <button
+                <Button
                   type="button"
-                  className="btn btn-ghost"
+                  variant="ghost"
                   onClick={() => setOpen(false)}
                   disabled={busy}
                 >
                   Cancel
-                </button>
-                <button className="btn btn-primary" type="submit" disabled={busy || !name.trim()}>
+                </Button>
+                <Button type="submit" disabled={busy || !name.trim()}>
                   {busy ? "Creating…" : "Create organization"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>

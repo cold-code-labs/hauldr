@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { ProjectDetail } from "../../../../lib/api";
 import { Icon } from "../../../icons";
+import { StatusBadge } from "../../../../components/StatusBadge";
 
 function Copy({ value }: { value: string }) {
   const [done, setDone] = useState(false);
@@ -24,17 +25,6 @@ function Copy({ value }: { value: string }) {
     >
       {done ? "Copied" : "Copy"}
     </button>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const label =
-    status === "live" ? "Live" : status === "error" ? "Error" : "Provisioning";
-  return (
-    <span className={`sbadge ${status}`}>
-      <span className="sdot" />
-      {label}
-    </span>
   );
 }
 

@@ -2,19 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { EmptyState, Stat, StatStrip } from "@cold-code-labs/yggdrasil-react";
 import type { ProjectRow } from "../../lib/api";
 import { Icon } from "../icons";
-
-function StatusBadge({ status }: { status: string }) {
-  const label =
-    status === "live" ? "Live" : status === "error" ? "Error" : "Provisioning";
-  return (
-    <span className={`sbadge ${status}`}>
-      <span className="sdot" />
-      {label}
-    </span>
-  );
-}
+import { StatusBadge } from "../../components/StatusBadge";
 
 export function DashboardClient({ initial }: { initial: ProjectRow[] }) {
   const [projects, setProjects] = useState<ProjectRow[]>(initial ?? []);
@@ -40,55 +31,17 @@ export function DashboardClient({ initial }: { initial: ProjectRow[] }) {
 
   return (
     <div className="content">
-      <div className="metric-grid">
-        <div className="metric">
-          <div className="metric-top">
-            <span className="metric-ic">
-              <Icon name="projects" />
-            </span>
-            <span className="metric-label">Projects</span>
-          </div>
-          <div className="metric-value">{total}</div>
-          <div className="metric-foot">{live} live</div>
-        </div>
-
-        <div className="metric">
-          <div className="metric-top">
-            <span className="metric-ic ok">
-              <Icon name="overview" />
-            </span>
-            <span className="metric-label">Health</span>
-          </div>
-          <div className="metric-value">
-            {total === 0 ? "—" : issues ? `${total - issues}/${total}` : "All up"}
-          </div>
-          <div className="metric-foot">
-            {issues ? `${issues} need attention` : "no incidents"}
-          </div>
-        </div>
-
-        <div className="metric">
-          <div className="metric-top">
-            <span className="metric-ic">
-              <Icon name="users" />
-            </span>
-            <span className="metric-label">Auth (GoTrue)</span>
-          </div>
-          <div className="metric-value">{authCount}</div>
-          <div className="metric-foot">one per project</div>
-        </div>
-
-        <div className="metric">
-          <div className="metric-top">
-            <span className="metric-ic">
-              <Icon name="services" />
-            </span>
-            <span className="metric-label">REST (PostgREST)</span>
-          </div>
-          <div className="metric-value">{restCount}</div>
-          <div className="metric-foot">à-la-carte</div>
-        </div>
-      </div>
+      <StatStrip>
+        <Stat value={total} label={`Projects · ${live} live`} dot tone="info" />
+        <Stat
+          value={total === 0 ? "—" : issues ? `${total - issues}/${total}` : "All up"}
+          label={issues ? `Health · ${issues} need attention` : "Health · no incidents"}
+          dot
+          tone={issues ? "err" : "ok"}
+        />
+        <Stat value={authCount} label="Auth (GoTrue) · one per project" dot tone="info" />
+        <Stat value={restCount} label="REST (PostgREST) · à-la-carte" dot tone="info" />
+      </StatStrip>
 
       <div className="section-title">
         <h2>Projects</h2>
@@ -105,16 +58,15 @@ export function DashboardClient({ initial }: { initial: ProjectRow[] }) {
       </div>
 
       {total === 0 ? (
-        <div className="card empty">
-          <div className="big">No projects yet</div>
-          <div>
-            Create your first one from{" "}
-            <Link href="/projects" style={{ color: "var(--cyan-strong)", fontWeight: 600 }}>
-              Projects
+        <EmptyState
+          title="No projects yet"
+          description="Create your first one from Projects."
+          action={
+            <Link href="/projects" className="btn btn-primary">
+              Go to Projects
             </Link>
-            .
-          </div>
-        </div>
+          }
+        />
       ) : (
         <div className="card health-list">
           {projects.map((p) => {

@@ -3,19 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Button, EmptyState, Input } from "@cold-code-labs/yggdrasil-react";
 import type { ProjectRow } from "../../../lib/api";
 import { Icon } from "../../icons";
-
-function StatusBadge({ status }: { status: string }) {
-  const label =
-    status === "live" ? "Live" : status === "error" ? "Error" : "Provisioning";
-  return (
-    <span className={`sbadge ${status}`}>
-      <span className="sdot" />
-      {label}
-    </span>
-  );
-}
+import { StatusBadge } from "../../../components/StatusBadge";
 
 export function ProjectsList({
   initial,
@@ -81,17 +72,22 @@ export function ProjectsList({
               <span className="spinner" /> provisioning…
             </span>
           )}
-          <button className="btn btn-primary" type="button" onClick={() => setOpen(true)}>
+          <Button type="button" onClick={() => setOpen(true)}>
             <Icon name="plus" /> New project
-          </button>
+          </Button>
         </div>
       </div>
 
       {projects.length === 0 ? (
-        <div className="card empty">
-          <div className="big">No projects yet</div>
-          <div>Click “New project” to provision your first database.</div>
-        </div>
+        <EmptyState
+          title="No projects yet"
+          description="Click “New project” to provision your first database."
+          action={
+            <Button type="button" onClick={() => setOpen(true)}>
+              <Icon name="plus" /> New project
+            </Button>
+          }
+        />
       ) : (
         <div className="card">
           {projects.map((p) => {
@@ -154,9 +150,8 @@ export function ProjectsList({
                 <label className="label" htmlFor="pname">
                   Project name
                 </label>
-                <input
+                <Input
                   id="pname"
-                  className="input"
                   placeholder="project name — a-z, 0-9, _"
                   pattern="[a-z][a-z0-9_]*"
                   value={name}
@@ -199,17 +194,17 @@ export function ProjectsList({
               {error && <div className="form-error">{error}</div>}
 
               <div className="modal-foot">
-                <button
+                <Button
                   type="button"
-                  className="btn btn-ghost"
+                  variant="ghost"
                   onClick={() => setOpen(false)}
                   disabled={creating}
                 >
                   Cancel
-                </button>
-                <button className="btn btn-primary" type="submit" disabled={creating || !name.trim()}>
+                </Button>
+                <Button type="submit" disabled={creating || !name.trim()}>
                   {creating ? "Starting…" : "Create project"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
