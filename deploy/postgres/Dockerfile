@@ -25,3 +25,21 @@ RUN set -eux; \
     cd /; rm -rf /tmp/wal2json; \
     apk del .wal2json-build; \
     test -f "$(pg_config --pkglibdir)/wal2json.so"
+
+# pgvector — vector type + HNSW/ivfflat indexes, for semantic search over a
+# project's data (e.g. Brokk's per-repo memory). Like wal2json: just a plugin
+# .so, dormant until a project runs `CREATE EXTENSION vector` — zero impact on
+# tenants that don't. Built with OPTFLAGS="" (no -march=native, for a portable
+# reproducible binary) and with_llvm=no — the alpine base ships no clang for the
+# optional JIT bitcode, and HNSW needs no JIT (verified the .so links + the
+# extension installs without it). Same plain-C-toolchain approach as wal2json.
+ARG PGVECTOR_REF=v0.8.0
+RUN set -eux; \
+    apk add --no-cache --virtual .pgvector-build build-base git; \
+    git clone --depth 1 --branch "${PGVECTOR_REF}" https://github.com/pgvector/pgvector.git /tmp/pgvector; \
+    cd /tmp/pgvector; \
+    make PG_CONFIG=/usr/local/bin/pg_config OPTFLAGS="" with_llvm=no; \
+    make PG_CONFIG=/usr/local/bin/pg_config OPTFLAGS="" with_llvm=no install; \
+    cd /; rm -rf /tmp/pgvector; \
+    apk del .pgvector-build; \
+    test -f "$(pg_config --pkglibdir)/vector.so"
