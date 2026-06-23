@@ -8,7 +8,7 @@
 #
 # The panel is routed at the control plane's domain via Coolify's
 # docker_compose_domains (service: panel). The management API is published only
-# on surtr's private WireGuard IP (10.10.0.2:8787) — internal services reach it
+# on a private WireGuard IP (<hauldr-control-host>:8787) — internal services reach it
 # as control-plane:8787; Heimdall reaches it across WireGuard. Never public.
 #
 # Multi-tenant pooling (Supavisor) is layered in once this is green.
