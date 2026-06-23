@@ -4,9 +4,11 @@ Hauldr is built to run on infrastructure you own. This document covers how the
 stack comes up, the "project zero" bootstrap, and what an operator is
 responsible for.
 
-> Implementation is in progress. This describes the intended deployment shape;
-> exact commands and a reference `compose` file will land with the first
-> milestone (see the [roadmap](roadmap.md)).
+> Hauldr runs in production at Cold Code Labs from the reference
+> [`docker-compose.prod.yml`](../docker-compose.prod.yml) and
+> [`.env.example`](../.env.example). This document covers the deployment *shape*
+> and the "project zero" bootstrap model; a polished one-command installer is
+> still being finalized (see the [roadmap](roadmap.md)).
 
 ## What runs
 

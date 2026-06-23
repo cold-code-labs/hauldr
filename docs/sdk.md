@@ -4,8 +4,9 @@
 product. It hides the pooler, the auth server, and the object store behind one
 small, coherent surface, so application developers never wire those up by hand.
 
-> The SDK is in design. The surface below is the intended shape; expect changes
-> until a tagged release.
+> The SDK ships in [`packages/client`](../packages/client) and runs in
+> production, but Hauldr is pre-alpha — expect changes to this surface until a
+> tagged release.
 
 ## Creating a client
 
