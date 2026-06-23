@@ -2,8 +2,11 @@
 FROM node:22-alpine AS build
 RUN npm i -g pnpm@9
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# Read-only GitHub Packages token for the private @cold-code-labs/* deps.
+# Build-stage only — this stage is discarded; the runtime image carries no token.
+ARG NODE_AUTH_TOKEN
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN NODE_AUTH_TOKEN="$NODE_AUTH_TOKEN" pnpm install --no-frozen-lockfile
 COPY . ./
 RUN pnpm build
 

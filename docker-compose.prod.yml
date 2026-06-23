@@ -153,6 +153,10 @@ services:
     build:
       context: ./panel
       dockerfile: Dockerfile
+      args:
+        # Read-only GitHub Packages token for the private @cold-code-labs/* deps
+        # (build-stage only; injected by Coolify as a buildtime secret).
+        NODE_AUTH_TOKEN: ${NODE_AUTH_TOKEN:-}
     mem_limit: 768m
     mem_reservation: 128m
     cpus: 1.0

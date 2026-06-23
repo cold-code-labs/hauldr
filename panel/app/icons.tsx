@@ -158,23 +158,24 @@ export function Icon({ name }: { name: string }) {
 }
 
 export function ShieldMark() {
+  // Recolored onto the Yggdrasil accent (drops the old cyan→violet gradient so
+  // it matches the flat brand word and adapts to light/dark).
   return (
-    <svg viewBox="0 0 24 24" className="brand-mark" fill="none">
-      <defs>
-        <linearGradient id="hold-g" x1="0" y1="0" x2="24" y2="24">
-          <stop offset="0" stopColor="#5ad1e8" />
-          <stop offset="1" stopColor="#8b7cf6" />
-        </linearGradient>
-      </defs>
+    <svg
+      viewBox="0 0 24 24"
+      className="brand-mark"
+      fill="none"
+      style={{ color: "var(--accent)" }}
+    >
       <path
         d="M12 2.5 4.5 5.6v5.2c0 4.7 3.2 8.9 7.5 10.2 4.3-1.3 7.5-5.5 7.5-10.2V5.6L12 2.5Z"
-        stroke="url(#hold-g)"
+        stroke="currentColor"
         strokeWidth="1.7"
         strokeLinejoin="round"
       />
       <path
         d="m8.6 12 2.3 2.3L15.6 9.6"
-        stroke="url(#hold-g)"
+        stroke="currentColor"
         strokeWidth="1.7"
         strokeLinecap="round"
         strokeLinejoin="round"

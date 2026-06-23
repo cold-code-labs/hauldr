@@ -7,6 +7,7 @@ import type { Org } from "../../lib/api";
 import { Icon, ShieldMark } from "../icons";
 import { logoutAction } from "./actions";
 import { OrgSwitcher } from "./OrgSwitcher";
+import { ThemeToggle } from "../../components/ThemeToggle";
 
 function projectFromPath(path: string): { name: string; section: string } | null {
   const parts = path.split("/").filter(Boolean);
@@ -32,10 +33,20 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <Link href="/" className="brand brand-sm">
-          <ShieldMark />
-          <span className="brand-word">Hauldr</span>
-        </Link>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+          <Link href="/" className="brand brand-sm">
+            <ShieldMark />
+            <span className="brand-word">Hauldr</span>
+          </Link>
+          <ThemeToggle />
+        </div>
         <OrgSwitcher orgs={orgs} current={currentOrg} />
       </div>
 

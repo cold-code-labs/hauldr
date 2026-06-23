@@ -1,34 +1,43 @@
-/* Hauldr — control panel design system (light)
-   "Hauldr guarda." Clean paper surface + glacial aurora (cyan → violet). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hauldr — control panel, themed on Yggdrasil (Cold Code Labs design system).
+   This :root is now a thin ALIAS layer: Hauldr's bespoke token names map onto
+   the Yggdrasil tokens (imported first in layout.tsx). The 1500 lines below
+   resolve to cold-paper values with zero body edits. Dual-mode: a `.dark` on
+   <html> flips Yggdrasil to navy and these aliases follow automatically. */
 
 :root {
-  --bg: #f6f7f9;
-  --bg-elev: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #eef1f5;
-  --border: rgba(18, 24, 40, 0.09);
-  --border-strong: rgba(18, 24, 40, 0.15);
+  /* surfaces */
+  --bg-elev: var(--panel);
+  --surface: var(--panel);
+  --surface-2: var(--panel-2);
+  --border: var(--line);
+  --border-strong: var(--line);
 
-  --text: #161b26;
-  --muted: #5a6478;
-  --faint: #97a0b2;
+  /* text */
+  --text: var(--fg);
+  --muted: var(--fg-soft);
+  --faint: var(--fg-dim);
 
-  --cyan: #0e9bbd;
-  --cyan-strong: #0284c7;
-  --violet: #6d4ee0;
-  --aurora: linear-gradient(135deg, #0fa6c8 0%, #3b82d6 48%, #6d4ee0 100%);
+  /* accent — aurora gradient killed, now a flat Yggdrasil accent */
+  --cyan: var(--accent);
+  --cyan-strong: var(--accent);
+  --violet: var(--accent);
+  --aurora: var(--accent);
 
-  --success: #15a34a;
-  --danger: #dc2626;
-  --warn: #c2740a;
+  /* status */
+  --success: var(--ok);
+  --danger: var(--err);
+  --warn: var(--warn);
 
-  --radius: 12px;
-  --radius-sm: 8px;
-  --shadow: 0 1px 2px rgba(18, 24, 40, 0.04),
-    0 10px 30px -16px rgba(18, 24, 40, 0.18);
+  /* shape + elevation (Yggdrasil owns --radius / --radius-sm) */
+  --shadow: var(--shadow-1);
 
-  --sans: "Inter", system-ui, -apple-system, sans-serif;
-  --serif: "Instrument Serif", Georgia, serif;
+  /* type — serif dropped, both map to the sans stack */
+  --sans: var(--font-sans);
+  --serif: var(--font-sans);
 }
 
 * {
@@ -51,17 +60,7 @@ body {
   letter-spacing: 0.1px;
 }
 
-/* Aurora glow that bleeds from the top — the vault's cold light, softened for paper. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(60vw 50vh at 0% -10%, rgba(15, 166, 200, 0.06), transparent 60%),
-    radial-gradient(50vw 45vh at 100% 0%, rgba(109, 78, 224, 0.05), transparent 55%);
-  z-index: 0;
-}
+/* Aurora glow removed — flat cold-paper surface on Yggdrasil. */
 
 a {
   color: inherit;
@@ -88,15 +87,12 @@ h3 {
   flex: none;
 }
 .brand-word {
-  font-family: var(--serif);
-  font-size: 24px;
-  font-weight: 400;
-  letter-spacing: 0.2px;
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: 1;
-  background: var(--aurora);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
 }
 
 /* ---------- App shell ---------- */
@@ -118,7 +114,7 @@ h3 {
   gap: 4px;
   padding: 18px 14px;
   border-right: 1px solid var(--border);
-  background: linear-gradient(180deg, #ffffff, #fbfcfe 45%);
+  background: var(--panel);
 }
 .sidebar-head {
   padding: 6px 8px 16px;
@@ -309,7 +305,7 @@ h3 {
 
 .input {
   width: 100%;
-  background: #ffffff;
+  background: var(--panel);
   border: 1px solid var(--border-strong);
   color: var(--text);
   font-family: inherit;
@@ -726,7 +722,7 @@ h3 {
 .copybtn {
   flex: none;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--panel);
   color: var(--muted);
   border-radius: 6px;
   padding: 3px 8px;
@@ -1367,7 +1363,7 @@ h3 {
   align-items: center;
   gap: 9px;
   padding: 0 12px;
-  background: #ffffff;
+  background: var(--panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   transition: border-color 0.12s, box-shadow 0.12s;
