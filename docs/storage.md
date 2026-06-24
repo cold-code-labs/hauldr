@@ -5,32 +5,43 @@ with **one bucket per project**.
 
 ## The model
 
-- **One shared object store** in the data plane, self-hosted, S3-compatible.
-- **One bucket per project**, so a project's files are isolated from others'.
-- The SDK speaks **standard S3** (presigned URLs), which keeps the backend fully
-  pluggable.
-- **File metadata is a table** in the project's own database, protected by
-  **RLS** — so storage access control follows the exact same model as the rest of
-  the data.
+- A **per-project storage gateway** — `storage-api`, the same service Supabase
+  runs — exposed at `<project-host>/storage/v1` (alongside `/auth` and `/rest`).
+  It's **Supabase-compatible**, so `supabase-js`'s `.storage` client works
+  unchanged; see [supabase-compat](supabase-compat.md).
+- Requests authenticate with the **project's GoTrue JWT** — the same token used
+  for auth and data. Storage access control rides the **same identity** as the
+  rest of the data.
+- **File metadata is a table** (the `storage` schema) in the project's own
+  database, protected by **RLS** — so who-may-touch-what is just SQL + RLS.
+- **One bucket per project** keeps a project's files isolated; the gateway proxies
+  to an S3-compatible object store that stays **internal-only**, so the app holds
+  zero S3 credentials.
+- The gateway is provisioned **per project and per environment** — each
+  prod/dev project gets its own `storage-api` against its own database. Provision
+  them **symmetrically**: code that talks to the gateway will 404 in an
+  environment where it was never provisioned.
 
 ```
-hauldr.files.upload("avatars", file)
-        │
-        ├─▶ object store (bucket: project)  ── stores the bytes
-        └─▶ project database (metadata row, RLS-guarded)  ── who/what/when
+client.storage.from("avatars").upload(path, file)
+        │  (project GoTrue JWT)
+        ▼
+  storage-api gateway  ──▶ object store (bucket: project)   ── stores the bytes
+   <host>/storage/v1   ──▶ project database (storage schema, RLS)  ── who/what/when
 ```
 
-The default backend is [Garage](https://garagehq.deuxfleurs.fr/) — a
-lightweight, S3-compatible, self-hosted object store. Because the SDK only speaks
-S3, swapping the backend (for another S3-compatible store) is a drop-in change.
+The default object backend is [Garage](https://garagehq.deuxfleurs.fr/) — a
+lightweight, S3-compatible, self-hosted store; swapping it for another
+S3-compatible store is a configuration change.
 
 ## Why metadata in the project database
 
-Rather than running a separate metadata service per project, Hauldr keeps file
-metadata as an ordinary table in the project's database. That means:
+The storage gateway keeps file metadata as an ordinary table set (the `storage`
+schema) in the **project's own database**, rather than in a separate central
+metadata service. That means:
 
 - file access control is **the same RLS** as everything else,
-- there is **no extra per-project service** to run for storage,
+- a project's file metadata lives and migrates **with that project's database**,
 - listing and querying files is just SQL.
 
 The object store holds bytes; the database holds the truth about who may touch
@@ -54,9 +65,9 @@ Pick at least one before putting anything you can't lose into storage. For most
 deployments, off-site cold backup plus snapshots is a reasonable baseline; add
 replication once there's a second node.
 
-## Advanced storage (later)
+## Advanced storage
 
-Things like image transforms and resumable (TUS) uploads are intentionally out
-of scope for the first iterations. The plan is to keep them thin in the SDK at
-first and only adopt a heavier storage service if real demand appears. See the
-[roadmap](roadmap.md).
+Because the gateway is `storage-api`, resumable (TUS) and S3-protocol uploads come
+with it. **Image transformations are intentionally disabled** for now (no imgproxy
+sidecar) to keep the footprint small; they can be enabled later if real demand
+appears. See the [roadmap](roadmap.md).
