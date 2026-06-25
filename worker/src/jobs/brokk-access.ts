@@ -86,7 +86,10 @@ async function grant(repo: string): Promise<"granted" | "invited"> {
 
 async function run(): Promise<void> {
   const gh = config.github;
-  if (!gh.token) throw new Error("GH_ADMIN_TOKEN not set");
+  if (!gh.token) {
+    console.log("[brokk-access] not configured (GH_ADMIN_TOKEN) — skipping");
+    return;
+  }
 
   const target = RANK[gh.permission] ?? RANK.push;
   const all = await listOrgRepos();
