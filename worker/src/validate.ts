@@ -1,5 +1,6 @@
 import { createBoss } from "./boss";
 import { brokkAccess } from "./jobs/brokk-access";
+import { extractUsage } from "./jobs/kapso-usage";
 import { config } from "./config";
 
 /**
@@ -20,7 +21,17 @@ async function main(): Promise<void> {
   // 1) Job logic, no pg-boss.
   console.log(`[validate] brokk-access.run() (dryRun=${config.github.dryRun})…`);
   await brokkAccess.run();
-  console.log("[validate] ✓ job ran");
+  console.log("[validate] ✓ brokk-access ran");
+
+  // 1b) kapso-usage token-extraction heuristic — pure, no network.
+  const u = extractUsage(
+    { data: { usage: { prompt_tokens: 10, completion_tokens: 5 }, model: "gpt-4o" } },
+    { prompt: 0, completion: 0, model: null, found: false },
+  );
+  if (!(u.found && u.prompt === 10 && u.completion === 5 && u.model === "gpt-4o")) {
+    throw new Error(`extractUsage heuristic broken: ${JSON.stringify(u)}`);
+  }
+  console.log("[validate] ✓ kapso extractUsage heuristic");
 
   // 2) pg-boss roundtrip — only with a store configured.
   if (!config.databaseUrl) {

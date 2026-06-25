@@ -331,6 +331,11 @@ services:
       GH_ORG: ${GH_ORG:-cold-code-labs}
       GH_BOT: ${GH_BOT:-brokk-ccl}
       GH_BOT_DENYLIST: ${GH_BOT_DENYLIST:-}
+      # kapso-pull-usage — pull Kapso workflow token usage into kelvin.llm_usage.
+      # All three unset → the job skips cleanly (worker still runs brokk-access).
+      KAPSO_API_KEY: ${KAPSO_API_KEY:-}
+      KELVIN_SUPABASE_URL: ${KELVIN_SUPABASE_URL:-}
+      KELVIN_SUPABASE_SECRET_KEY: ${KELVIN_SUPABASE_SECRET_KEY:-}
     depends_on:
       hauldr-db:
         condition: service_healthy

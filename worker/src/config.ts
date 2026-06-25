@@ -41,4 +41,25 @@ export const config = {
     // Log what WOULD be granted without writing — safe first run / smoke tests.
     dryRun: process.env.GH_BOT_DRY_RUN === "1",
   },
+
+  // ── kapso-pull-usage reconciler ───────────────────────────────────────────
+  // Pull token usage from Kapso workflow executions into kelvin.llm_usage.
+  // Source = Kapso platform API; destination = Kelvin's Supabase via PostgREST
+  // (schema `kelvin`). Any required value unset → the job skips (no-op), so the
+  // worker can ship before this is wired.
+  kapso: {
+    apiKey: process.env.KAPSO_API_KEY ?? "",
+    platform: process.env.KAPSO_PLATFORM_URL ?? "https://api.kapso.ai/platform/v1",
+    workflowId:
+      process.env.KELVIN_WORKFLOW_ID ?? "88bbca67-283a-4133-9f75-fe2c44cfac1f",
+    customerSlug: process.env.KELVIN_CUSTOMER_SLUG ?? "kelvin",
+    // Kelvin's Supabase (destination), PostgREST at /rest/v1, schema `kelvin`.
+    supabaseUrl:
+      process.env.KELVIN_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    supabaseKey:
+      process.env.KELVIN_SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SECRET_KEY ?? "",
+    lookbackDays: Number(process.env.KAPSO_LOOKBACK_DAYS ?? 7),
+    cron: process.env.KAPSO_CRON ?? "17 3 * * *", // daily ~03:17 UTC
+    dryRun: process.env.KAPSO_DRY_RUN === "1",
+  },
 };

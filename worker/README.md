@@ -39,6 +39,7 @@ idempotent.
 | Job                      | Schedule        | What it does                                                                                            |
 | ------------------------ | --------------- | ------------------------------------------------------------------------------------------------------ |
 | `brokk-access-reconcile` | `*/15 * * * *`  | Grants the review bot (`brokk-ccl`) `push` on every active org repo, minus a denylist. Idempotent.     |
+| `kapso-pull-usage`       | `17 3 * * *`    | Pulls Kapso workflow token usage into `kelvin.llm_usage`. Idempotent; skips cleanly if unconfigured.   |
 
 ## Env
 
