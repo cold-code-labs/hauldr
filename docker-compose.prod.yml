@@ -99,6 +99,11 @@ services:
       # Default organization (tenant zero) name for this unattended install. The
       # bootstrap creates it and adopts any existing projects into it.
       HAULDR_ORG_NAME: ${HAULDR_ORG_NAME:-My Organization}
+      # Fleet jobs — bootstrap ensures the worker's role + db when a password is
+      # set (skipped otherwise). Must match what the `worker` service connects with.
+      HAULDR_JOBS_DB: ${HAULDR_JOBS_DB:-hauldr_jobs}
+      HAULDR_JOBS_ROLE: ${HAULDR_JOBS_ROLE:-fleet_worker}
+      HAULDR_JOBS_DB_PASSWORD: ${HAULDR_JOBS_DB_PASSWORD:-}
     depends_on:
       hauldr-db:
         condition: service_healthy
@@ -302,6 +307,43 @@ services:
       coolify:
         aliases:
           - hauldr-realtime
+    restart: unless-stopped
+
+  # Fleet jobs — a single SHARED background-job worker (cron + durable jobs) on
+  # pg-boss. Unlike auth/REST it is NOT per project: one worker serves the whole
+  # fleet (like Realtime). Connects DIRECTLY to Postgres — pg-boss needs session-
+  # level LISTEN/NOTIFY, which the transaction-mode pooler doesn't carry — using
+  # the `fleet_worker` role + `hauldr_jobs` db the control plane ensures at
+  # bootstrap. No inbound HTTP → no ports, no domain. depends_on control-plane so
+  # that bootstrap (which creates its role + db) has run first. Empty
+  # HAULDR_JOBS_DB_PASSWORD → bootstrap skips the store and this can't connect.
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    mem_limit: 384m
+    mem_reservation: 64m
+    cpus: 0.5
+    environment:
+      DATABASE_URL: postgres://${HAULDR_JOBS_ROLE:-fleet_worker}:${HAULDR_JOBS_DB_PASSWORD}@hauldr-db:5432/${HAULDR_JOBS_DB:-hauldr_jobs}
+      # brokk-access reconciler — auto-grant the review bot push on every org repo.
+      GH_ADMIN_TOKEN: ${GH_ADMIN_TOKEN}
+      GH_ORG: ${GH_ORG:-cold-code-labs}
+      GH_BOT: ${GH_BOT:-brokk-ccl}
+      GH_BOT_DENYLIST: ${GH_BOT_DENYLIST:-}
+      # kapso-pull-usage — pull Kapso workflow token usage into kelvin.llm_usage.
+      # All three unset → the job skips cleanly (worker still runs brokk-access).
+      KAPSO_API_KEY: ${KAPSO_API_KEY:-}
+      KELVIN_SUPABASE_URL: ${KELVIN_SUPABASE_URL:-}
+      KELVIN_SUPABASE_SECRET_KEY: ${KELVIN_SUPABASE_SECRET_KEY:-}
+    depends_on:
+      hauldr-db:
+        condition: service_healthy
+      control-plane:
+        condition: service_healthy
+    networks:
+      default: {}
+      coolify: {}
     restart: unless-stopped
 
 networks:

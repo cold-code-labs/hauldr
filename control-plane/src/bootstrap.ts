@@ -78,6 +78,65 @@ export async function bootstrap() {
     }
     console.log("realtime metadata db ready: _realtime");
   }
+
+  // Fleet jobs — the shared pg-boss worker's store. Ensure its login role and a
+  // dedicated database that role OWNS, so pg-boss can create its `pgboss` schema
+  // and tables on first boot. This is a singleton fleet service (one worker for
+  // the whole fleet, like Realtime), not a per-project tenant — so it lives in
+  // bootstrap beside the other infra dbs, not in provisionDatabase. Gated on a
+  // configured password: no password → jobs are not deployed, skip the step.
+  if (config.jobsRolePassword) {
+    await ensureJobsStore();
+    console.log(
+      `fleet jobs store ready: ${config.jobsDb} (owner ${config.jobsRole})`,
+    );
+  }
+}
+
+/**
+ * Ensure the fleet-jobs worker role and its database. The role is a plain login
+ * role (no anon/authenticated membership — this is infra, not an RLS tenant);
+ * it OWNS its database so pg-boss can create its schema. Idempotent: the
+ * password is (re)asserted from the environment, which is the source of truth.
+ */
+async function ensureJobsStore(): Promise<void> {
+  const admin = adminClient();
+  await admin.connect();
+  try {
+    const role = config.jobsRole;
+    const r = await admin.query("select 1 from pg_roles where rolname = $1", [
+      role,
+    ]);
+    if (!r.rowCount) {
+      await admin.query(
+        `create role ${ident(role)} login password ${lit(config.jobsRolePassword)}`,
+      );
+    } else {
+      await admin.query(
+        `alter role ${ident(role)} login password ${lit(config.jobsRolePassword)}`,
+      );
+    }
+    // CREATE DATABASE can't run in a transaction and can't be parameterized;
+    // names are operator-config, quoted defensively all the same.
+    const d = await admin.query(
+      "select 1 from pg_database where datname = $1",
+      [config.jobsDb],
+    );
+    if (!d.rowCount) {
+      await admin.query(
+        `create database ${ident(config.jobsDb)} owner ${ident(role)}`,
+      );
+    }
+  } finally {
+    await admin.end();
+  }
+}
+
+function ident(s: string) {
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+function lit(s: string) {
+  return "'" + s.replace(/'/g, "''") + "'";
 }
 
 /** Create a database if it does not already exist. */

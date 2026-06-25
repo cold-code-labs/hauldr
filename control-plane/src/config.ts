@@ -49,6 +49,20 @@ export const config = {
   // data port, which is what RLS-bound data uses).
   poolerSessionPort: Number(process.env.HAULDR_POOLER_SESSION_PORT ?? 5432),
 
+  // ── Fleet jobs (shared pg-boss worker) ─────────────────────────────────────
+  // A single, fleet-wide background-job runner (cron + durable jobs), backed by
+  // its OWN database on the shared cluster. Unlike auth/REST it is NOT per
+  // project — one worker serves the whole fleet (like Realtime). The control
+  // plane owns only the GLUE: at bootstrap it ensures the worker's login role
+  // and a dedicated database that role OWNS, so pg-boss can create its own
+  // `pgboss` schema and tables on first boot. The `worker` stack service then
+  // connects DIRECTLY to Postgres (not the pooler — pg-boss needs session-level
+  // LISTEN/NOTIFY, which the transaction-mode pooler doesn't carry). Empty
+  // password = jobs disabled: the bootstrap step is skipped.
+  jobsDb: process.env.HAULDR_JOBS_DB ?? "hauldr_jobs",
+  jobsRole: process.env.HAULDR_JOBS_ROLE ?? "fleet_worker",
+  jobsRolePassword: process.env.HAULDR_JOBS_DB_PASSWORD ?? "",
+
   // Object storage (Garage). Empty adminUrl/token/s3Endpoint = disabled (a
   // deployment without object storage; `hauldr.files` stays unconfigured). The
   // control plane reaches the admin API in-network; apps reach S3 via the S3
