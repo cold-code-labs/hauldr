@@ -326,6 +326,10 @@ services:
     cpus: 0.5
     environment:
       DATABASE_URL: postgres://${HAULDR_JOBS_ROLE:-fleet_worker}:${HAULDR_JOBS_DB_PASSWORD}@hauldr-db:5432/${HAULDR_JOBS_DB:-hauldr_jobs}
+      # Skuld app-callback — assina o POST ao endpoint interno do app (HMAC) e só
+      # entrega a hosts allowlistados. Vazio → o job recusa (não entrega nada).
+      SKULD_HMAC_SECRET: ${SKULD_HMAC_SECRET:-}
+      SKULD_HOST_ALLOWLIST: ${SKULD_HOST_ALLOWLIST:-}
       # brokk-access reconciler — auto-grant the review bot push on every org repo.
       GH_ADMIN_TOKEN: ${GH_ADMIN_TOKEN}
       GH_ORG: ${GH_ORG:-cold-code-labs}

@@ -31,11 +31,14 @@ async function main(): Promise<void> {
       console.log(`[worker] scheduled ${job.name} (${job.cron} UTC)`);
     }
 
-    await boss.work(job.name, async () => {
+    await boss.work(job.name, async (jobs) => {
       const t0 = Date.now();
+      // pg-boss v10 hands the handler an array of jobs (batchSize 1 by
+      // default); older shapes pass a single job. Read `data` from whichever.
+      const data = Array.isArray(jobs) ? jobs[0]?.data : (jobs as { data?: unknown })?.data;
       console.log(`[job:${job.name}] start`);
       try {
-        await job.run();
+        await job.run(data);
         console.log(`[job:${job.name}] done in ${Date.now() - t0}ms`);
       } catch (e) {
         console.error(`[job:${job.name}] failed:`, (e as Error).message);

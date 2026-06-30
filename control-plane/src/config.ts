@@ -62,6 +62,8 @@ export const config = {
   jobsDb: process.env.HAULDR_JOBS_DB ?? "hauldr_jobs",
   jobsRole: process.env.HAULDR_JOBS_ROLE ?? "fleet_worker",
   jobsRolePassword: process.env.HAULDR_JOBS_DB_PASSWORD ?? "",
+  // pg-boss schema in the jobs store (must match the worker's HAULDR_JOBS_SCHEMA).
+  jobsSchema: process.env.HAULDR_JOBS_SCHEMA ?? "pgboss",
 
   // Object storage (Garage). Empty adminUrl/token/s3Endpoint = disabled (a
   // deployment without object storage; `hauldr.files` stays unconfigured). The
@@ -183,6 +185,23 @@ export const config = {
 export function urlForDb(database: string): string {
   const u = new URL(config.adminUrl);
   u.pathname = "/" + database;
+  return u.toString();
+}
+
+/**
+ * Direct connection string to the shared pg-boss store, as the `fleet_worker`
+ * role that OWNS it — so enqueueing from the control plane never skews schema
+ * ownership (the worker manages the schema as the same role). Built from the
+ * admin host/port with the jobs role's creds, or overridden by HAULDR_JOBS_URL.
+ * Empty when jobs are disabled (no role password) — callers gate on that.
+ */
+export function jobsUrl(): string {
+  if (process.env.HAULDR_JOBS_URL) return process.env.HAULDR_JOBS_URL;
+  if (!config.jobsRolePassword) return "";
+  const u = new URL(config.adminUrl);
+  u.username = config.jobsRole;
+  u.password = config.jobsRolePassword;
+  u.pathname = "/" + config.jobsDb;
   return u.toString();
 }
 

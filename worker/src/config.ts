@@ -24,6 +24,17 @@ export const config = {
   // pg-boss keeps its tables in this schema, isolated from anything else.
   schema: process.env.HAULDR_JOBS_SCHEMA ?? "pgboss",
 
+  // ── Skuld app-callback dispatcher ─────────────────────────────────────────
+  // The generic durable webhook: an app enqueues { url, body } (via the control
+  // plane) and the worker POSTs to the app's internal endpoint, signing the
+  // body so the app can verify the call came from Skuld. retry/backoff = pg-boss.
+  callback: {
+    hmacSecret: process.env.SKULD_HMAC_SECRET ?? "",
+    // Comma-separated host[:port] allowlist; a callback URL whose host isn't
+    // listed is refused (so an enqueue can't become an SSRF). Empty = refuse all.
+    allowlist: list(process.env.SKULD_HOST_ALLOWLIST),
+  },
+
   // ── brokk-access reconciler ───────────────────────────────────────────────
   // Grant the review bot (brokk-ccl) push on every repo in the org, so a newly
   // created project needs zero manual steps before brokk can open PRs.
