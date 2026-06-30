@@ -64,6 +64,10 @@ export const config = {
   jobsRolePassword: process.env.HAULDR_JOBS_DB_PASSWORD ?? "",
   // pg-boss schema in the jobs store (must match the worker's HAULDR_JOBS_SCHEMA).
   jobsSchema: process.env.HAULDR_JOBS_SCHEMA ?? "pgboss",
+  // Scoped key for POST /v1/jobs/enqueue — authorizes enqueue ONLY, so apps that
+  // produce jobs never hold the global management key. Empty = enqueue requires
+  // the global key (no scoped access).
+  skuldEnqueueKey: process.env.SKULD_ENQUEUE_KEY ?? "",
 
   // Object storage (Garage). Empty adminUrl/token/s3Endpoint = disabled (a
   // deployment without object storage; `hauldr.files` stays unconfigured). The

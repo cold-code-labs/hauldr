@@ -104,6 +104,8 @@ services:
       HAULDR_JOBS_DB: ${HAULDR_JOBS_DB:-hauldr_jobs}
       HAULDR_JOBS_ROLE: ${HAULDR_JOBS_ROLE:-fleet_worker}
       HAULDR_JOBS_DB_PASSWORD: ${HAULDR_JOBS_DB_PASSWORD:-}
+      # Scoped key apps use to enqueue (POST /v1/jobs/enqueue) — never the global key.
+      SKULD_ENQUEUE_KEY: ${SKULD_ENQUEUE_KEY:-}
     depends_on:
       hauldr-db:
         condition: service_healthy

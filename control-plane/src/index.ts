@@ -30,11 +30,21 @@ app.use("/v1/*", async (c, next) => {
   // The migrate route authenticates itself (global key OR a per-project scoped
   // token), so it's exempt from the global-key-only guard here.
   if (c.req.method === "POST" && c.req.path.endsWith("/migrate")) return next();
+  const auth = c.req.header("Authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  // Skuld enqueue accepts a SCOPED key that authorizes enqueue ONLY, so an app
+  // never needs the global management key (which can create/destroy any project).
+  if (
+    c.req.method === "POST" &&
+    c.req.path.endsWith("/jobs/enqueue") &&
+    config.skuldEnqueueKey &&
+    token === config.skuldEnqueueKey
+  ) {
+    return next();
+  }
   if (!config.apiKey) {
     return c.json({ error: "HAULDR_API_KEY not configured" }, 503);
   }
-  const auth = c.req.header("Authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (token !== config.apiKey) {
     return c.json({ error: "unauthorized" }, 401);
   }
