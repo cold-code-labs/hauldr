@@ -127,6 +127,10 @@ export const config = {
   // function), populated by `migrate-in`. See functionsapi.ts.
   edgeRuntimeImage: process.env.HAULDR_EDGE_RUNTIME_IMAGE ?? "supabase/edge-runtime:v1.67.4",
   functionsDir: process.env.HAULDR_FUNCTIONS_DIR ?? "/srv/hauldr/functions",
+  // migrate-in: Supabase Management API Personal Access Token (sbp_…) for the
+  // read-only preflight of a source project. The data gates (dump/restore) use
+  // the source's Postgres connection string, supplied per-migration.
+  migratePat: process.env.HAULDR_MIGRATE_PAT ?? "",
   // Legacy host-per-service storage domain; `{project}` substituted. Empty in
   // namespace mode (storage is path-routed at `/storage` under the project host).
   storageDomainPattern: process.env.HAULDR_STORAGE_DOMAIN_PATTERN ?? "",
