@@ -141,6 +141,16 @@ export const config = {
   storageApiImage: process.env.HAULDR_STORAGE_API_IMAGE ?? "supabase/storage-api:v1.60.4",
   // Max upload size in bytes (storage-api FILE_SIZE_LIMIT). Default 50 MiB.
   storageFileSizeLimit: Number(process.env.HAULDR_STORAGE_FILE_SIZE_LIMIT ?? 52428800),
+  // Functions Plane: per-project supabase/edge-runtime (Deno) serving the
+  // project's edge functions at `/functions/v1`. The function source lives on
+  // the docker host at `${functionsDir}/<name>` (a `main/` router + one dir per
+  // function), populated by `migrate-in`. See functionsapi.ts.
+  edgeRuntimeImage: process.env.HAULDR_EDGE_RUNTIME_IMAGE ?? "supabase/edge-runtime:v1.67.4",
+  functionsDir: process.env.HAULDR_FUNCTIONS_DIR ?? "/srv/hauldr/functions",
+  // migrate-in: Supabase Management API Personal Access Token (sbp_…) for the
+  // read-only preflight of a source project. The data gates (dump/restore) use
+  // the source's Postgres connection string, supplied per-migration.
+  migratePat: process.env.HAULDR_MIGRATE_PAT ?? "",
   // Legacy host-per-service storage domain; `{project}` substituted. Empty in
   // namespace mode (storage is path-routed at `/storage` under the project host).
   storageDomainPattern: process.env.HAULDR_STORAGE_DOMAIN_PATTERN ?? "",
@@ -227,7 +237,7 @@ export function hostFromPattern(pattern: string, name: string): string {
   return pattern.replace(/\{project\}/g, projectHostLabel(name));
 }
 
-export type ServiceKind = "auth" | "rest" | "realtime" | "storage";
+export type ServiceKind = "auth" | "rest" | "realtime" | "storage" | "functions";
 
 /**
  * The host label for an identity in an environment: `<base>` for prod,
@@ -273,7 +283,9 @@ export function endpointFor(
         ? config.restDomainPattern
         : service === "storage"
           ? config.storageDomainPattern
-          : config.realtimeDomainPattern;
+          : service === "realtime"
+            ? config.realtimeDomainPattern
+            : ""; // functions has no legacy host-per-service mode (namespace only)
   if (!legacy) {
     throw new Error(
       `no ${service} endpoint configured (set HAULDR_NAMESPACE_PATTERN or the legacy *_DOMAIN_PATTERN)`,

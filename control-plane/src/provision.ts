@@ -14,6 +14,7 @@ import { provisionAuth, destroyAuth, type ProjectAuth } from "./gotrue";
 import { destroyRest } from "./postgrest";
 import { destroyRealtime } from "./realtime";
 import { destroyStorageApi } from "./storageapi";
+import { destroyFunctions } from "./functionsapi";
 import {
   storageEnabled,
   provisionStorage,
@@ -200,6 +201,7 @@ export async function destroyProject(
   await destroyRest(name);
   await destroyStorageApi(name);
   await destroyRealtime(name);
+  await destroyFunctions(name);
   if (config.authProvisioner !== "none") {
     await destroyAuth(name);
   }

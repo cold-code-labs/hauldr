@@ -6,6 +6,9 @@ import { provisionRest, destroyRest } from "./postgrest";
 import { provisionAuth, destroyAuth } from "./gotrue";
 import { provisionRealtime, destroyRealtime } from "./realtime";
 import { provisionStorageApi, destroyStorageApi } from "./storageapi";
+import { provisionFunctions, destroyFunctions } from "./functionsapi";
+import { preflightSource } from "./preflight";
+import { migrateIn } from "./migrate-in";
 import { ensureMaster } from "./zero";
 import { migrateProject } from "./migrate";
 import { reconcileProject, reconcileAll } from "./reconcile";
@@ -310,6 +313,50 @@ app.delete("/v1/projects/:name/services/storage", async (c) => {
   try {
     await destroyStorageApi(c.req.param("name"));
     return c.json({ name: c.req.param("name"), storage: "removed" });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// Functions Plane — the per-project supabase/edge-runtime serving the project's
+// edge functions at `/functions/v1`. Opt-in; source populated by migrate-in.
+app.post("/v1/projects/:name/services/functions", async (c) => {
+  try {
+    const res = await provisionFunctions(c.req.param("name"));
+    return c.json(res, 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+app.delete("/v1/projects/:name/services/functions", async (c) => {
+  try {
+    await destroyFunctions(c.req.param("name"));
+    return c.json({ name: c.req.param("name"), functions: "removed" });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// migrate-in — import a Supabase project. Read-only preflight (go/no-go) and the
+// orchestrator that provisions the target + emits the guided data gates. The PAT
+// for the source's Management API is taken server-side (HAULDR_MIGRATE_PAT) or
+// passed in the body. See migrate-in.ts / Edda pilares/hauldr-migracao.
+app.post("/v1/migrate/preflight", async (c) => {
+  try {
+    const { ref, pat } = await c.req.json<{ ref?: string; pat?: string }>();
+    if (!ref) return c.json({ error: "ref required" }, 400);
+    return c.json(await preflightSource(ref, pat));
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+app.post("/v1/migrate-in", async (c) => {
+  try {
+    const { name, ref, pat } = await c.req.json<{ name?: string; ref?: string; pat?: string }>();
+    if (!name || !ref) return c.json({ error: "name and ref required" }, 400);
+    return c.json(await migrateIn({ name, ref, pat }), 201);
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }
