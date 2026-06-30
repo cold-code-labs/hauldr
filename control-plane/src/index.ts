@@ -16,6 +16,7 @@ import {
   systemStatus,
   initSystem,
 } from "./orgs";
+import { enqueueAppCallback } from "./jobs";
 import { config } from "./config";
 
 const app = new Hono();
@@ -129,6 +130,33 @@ app.post("/v1/organizations", async (c) => {
     return c.json(await createOrganization(body.name), 201);
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// Skuld — enqueue a durable app-callback into the shared pg-boss store. The
+// app creates its own `events` row, then asks the worker to POST back to its
+// internal endpoint with retry/backoff. Global-key gated (the /v1 guard above);
+// the worker signs the body so the app can verify the origin.
+app.post("/v1/jobs/enqueue", async (c) => {
+  const body = await c.req
+    .json()
+    .catch(() => ({}) as Record<string, unknown>);
+  if (typeof body?.url !== "string" || !body.url) {
+    return c.json({ error: "url required" }, 400);
+  }
+  try {
+    const id = await enqueueAppCallback({
+      url: body.url,
+      body: body.body,
+      retryLimit: typeof body.retryLimit === "number" ? body.retryLimit : undefined,
+      retryBackoff:
+        typeof body.retryBackoff === "boolean" ? body.retryBackoff : undefined,
+      singletonKey:
+        typeof body.singletonKey === "string" ? body.singletonKey : undefined,
+    });
+    return c.json({ ok: true, id });
+  } catch (e) {
+    return c.json({ ok: false, error: (e as Error).message }, 503);
   }
 });
 

@@ -11,8 +11,12 @@ export type FleetJob = {
   name: string;
   /** Cron expression (UTC) for a scheduled job. Omit for enqueue-only jobs. */
   cron?: string;
-  /** The work to perform on each run. */
-  run: () => Promise<void>;
+  /**
+   * The work to perform on each run. Receives the job payload (the `data`
+   * passed at enqueue time); cron and parameterless jobs ignore it, so the
+   * argument is optional.
+   */
+  run: (data?: unknown) => Promise<void>;
   /** Max retries on failure (default 3). */
   retryLimit?: number;
   /** Exponential backoff between retries (default true). */
