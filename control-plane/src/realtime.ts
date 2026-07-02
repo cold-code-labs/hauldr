@@ -89,6 +89,7 @@ async function applyRealtimeRls(database: string): Promise<void> {
 
 /** A short-lived admin JWT for the Realtime management API (API_JWT_SECRET). */
 function adminToken(): string {
+  if (!config.jwtSecret) throw new Error("HAULDR_JWT_SECRET is not set");
   const now = Math.floor(Date.now() / 1000);
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
   const payload = Buffer.from(
