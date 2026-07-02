@@ -28,6 +28,6 @@ console.log("signed up:", user.id);
 // Writes default `owner` to the caller's id; RLS keeps reads scoped to them.
 await hauldr.db.asUser(access_token).insert("todos", { title: "my first todo" });
 const todos = await hauldr.db.asUser(access_token).select<{ title: string }>("todos");
-console.log(`you have ${todos.length} todo(s):`, todos.map((t) => t.title));
+console.log("you have", todos.length, "todo(s):", todos.map((t) => t.title));
 
 await hauldr.db.end();
