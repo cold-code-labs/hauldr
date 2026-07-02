@@ -68,6 +68,11 @@ services:
     cpus: 1.0
     environment:
       HAULDR_DB_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@hauldr-db:5432/postgres
+      # Cron plane (pg_cron/pg_net) cluster. Empty ⇒ same as HAULDR_DB_ADMIN_URL
+      # (single cluster). Set to a separate superuser URL to run scheduling on a
+      # different substrate — used during the 16.14 → supabase/postgres transition
+      # so wiring cron to the v17 cluster never repoints the fleet control plane.
+      HAULDR_CRON_ADMIN_URL: ${HAULDR_CRON_ADMIN_URL:-}
       HAULDR_API_PORT: "8787"
       HAULDR_API_KEY: ${HAULDR_API_KEY}
       # Per-project auth — provisioned as separate Coolify apps on surtr.

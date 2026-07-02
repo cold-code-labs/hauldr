@@ -7,6 +7,7 @@ import { provisionAuth, destroyAuth } from "./gotrue";
 import { provisionRealtime, destroyRealtime } from "./realtime";
 import { provisionStorageApi, destroyStorageApi } from "./storageapi";
 import { provisionFunctions, destroyFunctions } from "./functionsapi";
+import { createSchedule, listSchedules, deleteSchedule } from "./schedulesapi";
 import { preflightSource } from "./preflight";
 import { migrateIn } from "./migrate-in";
 import { ensureMaster } from "./zero";
@@ -333,6 +334,35 @@ app.delete("/v1/projects/:name/services/functions", async (c) => {
   try {
     await destroyFunctions(c.req.param("name"));
     return c.json({ name: c.req.param("name"), functions: "removed" });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// Schedules — the Cron plane. One shared pg_cron scheduler; a schedule is a named
+// recurring job per project, run either in the project DB (kind "sql", via
+// schedule_in_database) or as an outbound HTTP call (kind "http", via pg_net) to
+// the app's endpoint / edge function. Replaces the hand-written hauldr-fn-* timers.
+app.get("/v1/projects/:name/schedules", async (c) => {
+  try {
+    return c.json(await listSchedules(c.req.param("name")));
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+app.post("/v1/projects/:name/schedules", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    return c.json(await createSchedule(c.req.param("name"), body), 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+app.delete("/v1/projects/:name/schedules/:jobname", async (c) => {
+  try {
+    return c.json(await deleteSchedule(c.req.param("name"), c.req.param("jobname")));
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }

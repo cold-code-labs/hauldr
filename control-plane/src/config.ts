@@ -13,6 +13,17 @@ export const config = {
   adminUrl:
     process.env.HAULDR_DB_ADMIN_URL ??
     "postgres://postgres:postgres@localhost:5433/postgres",
+  // The cluster the Cron plane (pg_cron/pg_net) lives on. During the
+  // 16.14→supabase/postgres transition the control plane still manages the old
+  // cluster (control DB + most project DBs) via adminUrl, while scheduling needs
+  // the new v17 substrate. Keep them separate so wiring cron to v17 never
+  // repoints the fleet control plane. Defaults to adminUrl when unset (single
+  // cluster). Must connect as a superuser (supabase_admin on v17) to create
+  // pg_cron/pg_net and register jobs.
+  cronAdminUrl:
+    process.env.HAULDR_CRON_ADMIN_URL ??
+    process.env.HAULDR_DB_ADMIN_URL ??
+    "postgres://postgres:postgres@localhost:5433/postgres",
   controlDb: process.env.HAULDR_CONTROL_DB ?? "hauldr",
   apiPort: Number(process.env.HAULDR_API_PORT ?? 8787),
 
