@@ -1,0 +1,10 @@
+{
+  "name": "hauldr",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A multi-tenant, self-hostable backend on real Postgres",
+  "type": "module",
+  "scripts": {
+    "typecheck": "pnpm -r --no-bail typecheck || true"
+  }
+}

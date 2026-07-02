@@ -1,0 +1,6 @@
+packages:
+  - 'control-plane'
+  - 'worker'
+  - 'packages/client'
+allowBuilds:
+  esbuild: false

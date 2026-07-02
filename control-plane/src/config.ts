@@ -9,10 +9,26 @@ for (const candidate of ["../.env", ".env"]) {
   }
 }
 
+/**
+ * Validate that a required environment variable is set.
+ * Throws an error with a clear message if the variable is missing.
+ */
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `${name} environment variable is required but not set. ` +
+      `This is a security-critical setting that must be explicitly configured. ` +
+      `See documentation for setup instructions.`
+    );
+  }
+  return value;
+}
+
 export const config = {
-  adminUrl:
-    process.env.HAULDR_DB_ADMIN_URL ??
-    "postgres://postgres:postgres@localhost:5433/postgres",
+  // HAULDR_DB_ADMIN_URL is required: no hardcoded default to prevent accidental
+  // use of well-known credentials in production. Fail fast at startup if missing.
+  adminUrl: requireEnv("HAULDR_DB_ADMIN_URL"),
   // The cluster the Cron plane (pg_cron/pg_net) lives on. During the
   // 16.14→supabase/postgres transition the control plane still manages the old
   // cluster (control DB + most project DBs) via adminUrl, while scheduling needs
@@ -21,9 +37,7 @@ export const config = {
   // cluster). Must connect as a superuser (supabase_admin on v17) to create
   // pg_cron/pg_net and register jobs.
   cronAdminUrl:
-    process.env.HAULDR_CRON_ADMIN_URL ??
-    process.env.HAULDR_DB_ADMIN_URL ??
-    "postgres://postgres:postgres@localhost:5433/postgres",
+    process.env.HAULDR_CRON_ADMIN_URL ?? requireEnv("HAULDR_DB_ADMIN_URL"),
   controlDb: process.env.HAULDR_CONTROL_DB ?? "hauldr",
   apiPort: Number(process.env.HAULDR_API_PORT ?? 8787),
 
